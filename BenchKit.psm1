@@ -19,7 +19,6 @@ function Stop-App {
             taskkill.exe /im "$AppName.exe" /f
         }
         default {
-            Write-Host "Killing $AppName..."
             taskkill.exe /im "$AppName.exe"
             try {
                 $proc | Wait-Process -ErrorAction Stop -Timeout 3
@@ -41,6 +40,24 @@ function Stop-BackgroundApps {
         Stop-App -AppName $app
     }
     Write-Host "Background apps closed."
+}
+
+function Set-ProcessPriority {
+    param(
+        [Parameter(Mandatory)][String]$Name,
+        [Parameter(Mandatory)][String]$Priority
+    )
+    Write-Host "Setting priority of $Name to $Priority..."
+    $process = Get-Process $Name -ErrorAction SilentlyContinue
+    if ($process) {
+        try {
+            $process.PriorityClass = $Priority
+        } catch {
+            Write-Warning "Failed to change priority: $($_.Exception.Message)"
+        }
+    } else {
+        Write-Warning "$Name process not found. Skipping priority change."
+    }
 }
 
 function Start-Hwinfo {
@@ -71,8 +88,10 @@ function Start-Hwinfo {
 
 function Stop-Hwinfo {
     param()
-    taskkill /im hwinfo64.exe
-    Get-Process hwinfo64 | Wait-Process -ErrorAction Stop -Timeout 3
+    while (Get-Process hwinfo64 -ErrorAction SilentlyContinue) {
+        taskkill /im hwinfo64.exe
+        Start-Sleep -Seconds 1
+    }
     Write-Host "HWiNFO logging stopped"
 }
 
@@ -109,30 +128,36 @@ function Invoke-Cinebench {
     while (-Not ((Get-Content $log -Raw -ErrorAction Stop) -Match "CINEBENCH AUTORUN")) {
         Start-Sleep -Milliseconds 200
     }
-    Write-Host "Setting priority to $Priority..."
-    $process = Get-Process Cinebench -ErrorAction SilentlyContinue
-    if ($process) {
-        try {
-            $process.PriorityClass = $Priority
-        } catch {
-            Write-Host "Failed to change priority: $($_.Exception.Message)"
-        }
-    } else {
-        Write-Warning "Cinebench process not found. Skipping priority change."
-    }
+    Set-ProcessPriority -Name Cinebench -Priority $Priority
     Write-Host "Waiting for Cinebench to complete..."
     Wait-Process -Name Cinebench
 }
 
 function Invoke-OCCT {
     param(
-        [Parameter(Mandatory)][String]$Folder,
-        [Parameter(Mandatory)][String]$OCCTExe
+        [Parameter(Mandatory)][String]$OCCTExe,
+        [Parameter(Mandatory)][String]$Priority
     )
     Write-Host "Starting OCCT..."
     & $OCCTExe
+    Start-Sleep -Seconds 15
+    Set-ProcessPriority -Name OCCT -Priority $Priority
     Write-Host "Waiting for OCCT to complete..."
     Wait-Process -Name OCCT
+}
+
+function Invoke-Prime95 {
+    param(
+        [Parameter(Mandatory)][String]$Prime95Exe,
+        [Parameter(Mandatory)][String]$Priority,
+        [Parameter(Mandatory)][Int32]$Duration
+    )
+    Write-Host "Starting Prime95..."
+    & $Prime95Exe -t8
+    Start-Sleep -Seconds 5
+    Set-ProcessPriority -Name Prime95 -Priority $Priority
+    Invoke-Wait -Duration $Duration
+    taskkill.exe /im "Prime95.exe"
 }
 
 function Invoke-HwinfoIdle {
@@ -141,7 +166,7 @@ function Invoke-HwinfoIdle {
         [Parameter(Mandatory)][String]$HwinfoExe,
         [Parameter(Mandatory)][String]$Duration
     )
-    Start-Hwinfo -Folder $Folder -hwinfoExe $HwinfoExe
+    Start-Hwinfo -Folder $Folder -HwinfoExe $HwinfoExe
     Invoke-Wait -Duration $Duration
     Stop-Hwinfo
 }
@@ -154,7 +179,7 @@ function Invoke-HwinfoCinebench {
         [Parameter(Mandatory)][String]$Priority,
         [Parameter(Mandatory)][String]$Duration
     )
-    Start-Hwinfo -Folder $Folder -hwinfoExe $HwinfoExe
+    Start-Hwinfo -Folder $Folder -HwinfoExe $HwinfoExe
     Invoke-Cinebench -Folder $Folder -CinebenchExe $CinebenchExe -Priority $Priority -Duration $Duration
     Stop-Hwinfo
 }
@@ -163,10 +188,24 @@ function Invoke-HwinfoOCCT {
     param(
         [Parameter(Mandatory)][String]$Folder,
         [Parameter(Mandatory)][String]$HwinfoExe,
-        [Parameter(Mandatory)][String]$OCCTExe
+        [Parameter(Mandatory)][String]$OCCTExe,
+        [Parameter(Mandatory)][String]$Priority
     )
-    Start-Hwinfo -Folder $Folder -hwinfoExe $HwinfoExe
-    Invoke-OCCT -Folder $Folder -OCCTExe $OCCTExe
+    Start-Hwinfo -Folder $Folder -HwinfoExe $HwinfoExe
+    Invoke-OCCT -OCCTExe $OCCTExe -Priority $Priority
+    Stop-Hwinfo
+}
+
+function Invoke-HwinfoPrime95 {
+    param(
+        [Parameter(Mandatory)][String]$Folder,
+        [Parameter(Mandatory)][String]$HwinfoExe,
+        [Parameter(Mandatory)][String]$Prime95Exe,
+        [Parameter(Mandatory)][String]$Priority,
+        [Parameter(Mandatory)][Int32]$Duration
+    )
+    Start-Hwinfo -Folder $Folder -HwinfoExe $HwinfoExe
+    Invoke-Prime95 -Prime95Exe $Prime95Exe -Priority $Priority -Duration $Duration
     Stop-Hwinfo
 }
 
@@ -176,9 +215,11 @@ function Invoke-BenchKit {
         [Parameter(Mandatory)][String]$HwinfoExe,
         [Parameter(Mandatory)][String]$CinebenchExe,
         [Parameter(Mandatory)][String]$OCCTExe,
+        [Parameter(Mandatory)][String]$Prime95Exe,
         [String]$Priority = "High",
         [Int32]$IdleDuration = 600,
-        [Int32]$CinebenchDuration = 900
+        [Int32]$CinebenchDuration = 900,
+        [Int32]$Prime95Duration = 600
     )
     Stop-BackgroundApps
     if (-not (Test-Path $Folder)) {
@@ -187,7 +228,8 @@ function Invoke-BenchKit {
     }
     Invoke-HwinfoIdle -Folder "$Folder\idle" -HwinfoExe $HwinfoExe -Duration $IdleDuration
     Invoke-HwinfoCinebench -Folder "$Folder\bench_cine_cpu" -HwinfoExe $HwinfoExe -CinebenchExe $CinebenchExe -Priority $Priority -Duration $CinebenchDuration
-    Invoke-HwinfoOCCT -Folder "$Folder\bench_occt_cpu" -HwinfoExe $HwinfoExe -OCCTExe $OCCTExe
-    Invoke-HwinfoOCCT -Folder "$Folder\bench_occt_ram" -HwinfoExe $HwinfoExe -OCCTExe $OCCTExe
-    Invoke-HwinfoOCCT -Folder "$Folder\stab_occt_cpu" -HwinfoExe $HwinfoExe -OCCTExe $OCCTExe
+    Invoke-HwinfoOCCT -Folder "$Folder\bench_occt_cpu" -HwinfoExe $HwinfoExe -OCCTExe $OCCTExe -Priority $Priority
+    Invoke-HwinfoOCCT -Folder "$Folder\bench_occt_ram" -HwinfoExe $HwinfoExe -OCCTExe $OCCTExe -Priority $Priority
+    Invoke-HwinfoOCCT -Folder "$Folder\stab_occt_cpu" -HwinfoExe $HwinfoExe -OCCTExe $OCCTExe -Priority $Priority
+    Invoke-HwinfoPrime95 -Folder "$Folder\stab_prime95" -HwinfoExe $HwinfoExe -Prime95Exe $Prime95Exe -Priority $Priority -Duration $Prime95Duration
 }
