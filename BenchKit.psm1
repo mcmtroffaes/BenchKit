@@ -51,7 +51,7 @@ function Start-Hwinfo {
     $csv = "$Folder\hwinfo.csv"
     if (-not (Test-Path $Folder)) {
         Write-Host "Creating folder '$Folder'..."
-        New-Item -Path "." -Name $Folder -ItemType "directory"
+        New-Item -Path $Folder -ItemType "directory" -Force
     }
     if (Test-Path $csv) {
         Write-Host "Removing existing '$csv'..."
@@ -74,6 +74,17 @@ function Stop-Hwinfo {
     taskkill /im hwinfo64.exe
     Get-Process hwinfo64 | Wait-Process -ErrorAction Stop -Timeout 3
     Write-Host "HWiNFO logging stopped"
+}
+
+function Invoke-Wait {
+    param(
+        [Parameter(Mandatory)][Int32]$Duration
+    )
+    [Int32]$interval = 10
+    for ($remaining = $Duration; $remaining -gt 0; $remaining -= $interval) {
+        Write-Progress -Activity "Idle" -Status "Waiting" -PercentComplete (100 - (100 * $remaining / $Duration)) -SecondsRemaining $remaining
+        Start-Sleep -Seconds $interval
+    }
 }
 
 function Invoke-Cinebench {
@@ -131,11 +142,7 @@ function Invoke-HwinfoIdle {
         [Parameter(Mandatory)][String]$Duration
     )
     Start-Hwinfo -Folder $Folder -hwinfoExe $HwinfoExe
-    $interval = 10 # update every 10 seconds
-    for ($remaining = $Duration; $remaining -ge 0; $remaining -= $interval) {
-        Write-Host "Time remaining: $remaining"
-        Start-Sleep -Seconds $interval
-    }
+    Invoke-Wait -Duration $Duration
     Stop-Hwinfo
 }
 
@@ -156,11 +163,10 @@ function Invoke-HwinfoOCCT {
     param(
         [Parameter(Mandatory)][String]$Folder,
         [Parameter(Mandatory)][String]$HwinfoExe,
-        [Parameter(Mandatory)][String]$OCCTExe,
-        [Parameter(Mandatory)][String]$Priority
+        [Parameter(Mandatory)][String]$OCCTExe
     )
     Start-Hwinfo -Folder $Folder -hwinfoExe $HwinfoExe
-    Invoke-OCCT -Folder $Folder -OCCTExe $OCCTExe -Priority $Priority
+    Invoke-OCCT -Folder $Folder -OCCTExe $OCCTExe
     Stop-Hwinfo
 }
 
@@ -177,7 +183,7 @@ function Invoke-BenchKit {
     Stop-BackgroundApps
     if (-not (Test-Path $Folder)) {
         Write-Host "Creating folder '$Folder'..."
-        New-Item -Path "." -Name $Folder -ItemType "directory"
+        New-Item -Path $Folder -ItemType "directory" -Force
     }
     Invoke-HwinfoIdle -Folder "$Folder\idle" -HwinfoExe $HwinfoExe -Duration $IdleDuration
     Invoke-HwinfoCinebench -Folder "$Folder\bench_cine_cpu" -HwinfoExe $HwinfoExe -CinebenchExe $CinebenchExe -Priority $Priority -Duration $CinebenchDuration
