@@ -116,22 +116,10 @@ function Invoke-Cinebench {
 function Invoke-OCCT {
     param(
         [Parameter(Mandatory)][String]$Folder,
-        [Parameter(Mandatory)][String]$OCCTExe,
-        [Parameter(Mandatory)][String]$Priority
+        [Parameter(Mandatory)][String]$OCCTExe
     )
     Write-Host "Starting OCCT..."
     & $OCCTExe
-    Write-Host "Setting priority to $Priority..."
-    $process = Get-Process OCCT -ErrorAction SilentlyContinue
-    if ($process) {
-        try {
-            $process.PriorityClass = $Priority
-        } catch {
-            Write-Host "Failed to change priority: $($_.Exception.Message)"
-        }
-    } else {
-        Write-Warning "OCCT process not found. Skipping priority change."
-    }
     Write-Host "Waiting for OCCT to complete..."
     Wait-Process -Name OCCT
 }
@@ -169,8 +157,7 @@ function Invoke-HwinfoOCCT {
         [Parameter(Mandatory)][String]$Folder,
         [Parameter(Mandatory)][String]$HwinfoExe,
         [Parameter(Mandatory)][String]$OCCTExe,
-        [Parameter(Mandatory)][String]$Priority,
-        [Parameter(Mandatory)][String]$Duration
+        [Parameter(Mandatory)][String]$Priority
     )
     Start-Hwinfo -Folder $Folder -hwinfoExe $HwinfoExe
     Invoke-OCCT -Folder $Folder -OCCTExe $OCCTExe -Priority $Priority
@@ -194,7 +181,7 @@ function Invoke-BenchKit {
     }
     Invoke-HwinfoIdle -Folder "$Folder\idle" -HwinfoExe $HwinfoExe -Duration $IdleDuration
     Invoke-HwinfoCinebench -Folder "$Folder\bench_cine_cpu" -HwinfoExe $HwinfoExe -CinebenchExe $CinebenchExe -Priority $Priority -Duration $CinebenchDuration
-    Invoke-HwinfoOCCT -Folder "$Folder\stab_occt_cpu" -HwinfoExe $HwinfoExe -OCCTExe $OCCTExe -Priority $Priority
-    Invoke-HwinfoOCCT -Folder "$Folder\bench_occt_cpu" -HwinfoExe $HwinfoExe -OCCTExe $OCCTExe -Priority $Priority
-    Invoke-HwinfoOCCT -Folder "$Folder\bench_occt_ram" -HwinfoExe $HwinfoExe -OCCTExe $OCCTExe -Priority $Priority
+    Invoke-HwinfoOCCT -Folder "$Folder\bench_occt_cpu" -HwinfoExe $HwinfoExe -OCCTExe $OCCTExe
+    Invoke-HwinfoOCCT -Folder "$Folder\bench_occt_ram" -HwinfoExe $HwinfoExe -OCCTExe $OCCTExe
+    Invoke-HwinfoOCCT -Folder "$Folder\stab_occt_cpu" -HwinfoExe $HwinfoExe -OCCTExe $OCCTExe
 }
