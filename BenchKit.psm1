@@ -213,12 +213,46 @@ function Invoke-Prime95 {
         [Parameter(Mandatory)][String]$Priority,
         [Parameter(Mandatory)][Int32]$Duration
     )
+    $requiredLines = @(
+        'CpuSupportsAVX=0',
+        'CpuSupportsFMA3=0',
+        'CpuSupportsFMA4=0',
+        'CpuSupportsAVX2=0',
+        'CpuSupportsAVX512F=0'
+    )
+    $primeDir = Split-Path -Parent $Prime95Exe
+    $primeTxt = Join-Path $primeDir 'prime.txt'
+    if (-not (Test-Path $primeTxt)) {
+        Write-Error "prime.txt not found in $primeDir"
+        return
+    }
+    $content = Get-Content $primeTxt -ErrorAction Stop
+    foreach ($line in $requiredLines) {
+        if (-not ($content -contains $line)) {
+            Write-Error "Missing required line in prime.txt: '$line'"
+            Write-Host "Please ensure the following settings are present in prime.txt before running:"
+            $requiredLines | ForEach-Object { Write-Host "$_" }
+            return
+        }
+    }
+    $resultsTxt = Join-Path $primeDir "results.txt"
+    Remove-Item -Path $resultsTxt -ErrorAction SilentlyContinue
     Write-Host "Starting Prime95..."
     & $Prime95Exe -t8
     Start-Sleep -Seconds 5
     Set-ProcessPriority -Name Prime95 -Priority $Priority
     Invoke-Wait -Duration $Duration
     taskkill.exe /im "Prime95.exe"
+    Start-Sleep -Seconds 5
+    if (-not (Test-Path $resultsTxt)) {
+        Write-Warning "results.txt not found in $primeDir"
+    } else {
+        if ((Get-Content $resultsTxt) -contains "FATAL ERROR") {
+            Write-Error "Prime95 had fatal errors, system might be unstable."
+        } else {
+            Write-Host "Prime95 reported no errors."
+        }
+    }
 }
 
 function Invoke-HwinfoIdle {
