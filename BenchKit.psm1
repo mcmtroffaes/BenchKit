@@ -86,7 +86,8 @@ function Set-ProcessPriority {
 function Start-Hwinfo {
     param(
         [Parameter(Mandatory)][String]$Folder,
-        [Parameter(Mandatory)][String]$HwinfoExe
+        [Parameter(Mandatory)][String]$HwinfoExe,
+        [Parameter(Mandatory)][String]$Priority
     )
     $csv = "$Folder\hwinfo.csv"
     if (-not (Test-Path $Folder)) {
@@ -106,6 +107,7 @@ function Start-Hwinfo {
     while (-not (Test-Path $csv)) {
         Start-Sleep -Milliseconds 200
     }
+    Set-ProcessPriority -Name hwinfo64 -Priority $Priority
     Write-Host "HWiNFO logging started"
 }
 
@@ -124,9 +126,10 @@ function Invoke-Wait {
     )
     [Int32]$interval = 10
     for ($remaining = $Duration; $remaining -gt 0; $remaining -= $interval) {
-        Write-Progress -Activity "Idle" -Status "Waiting" -PercentComplete (100 - (100 * $remaining / $Duration)) -SecondsRemaining $remaining
+        Write-Progress -Activity "Sleep" -Status "Waiting" -PercentComplete (100 - (100 * $remaining / $Duration)) -SecondsRemaining $remaining
         Start-Sleep -Seconds $interval
     }
+    Write-Progress -Activity "Sleep" -Status "Finished" -PercentComplete 100 -SecondsRemaining 0
 }
 
 function Find-CinebenchValues {
@@ -222,9 +225,10 @@ function Invoke-HwinfoIdle {
     param(
         [Parameter(Mandatory)][String]$Folder,
         [Parameter(Mandatory)][String]$HwinfoExe,
+        [Parameter(Mandatory)][String]$Priority,
         [Parameter(Mandatory)][String]$Duration
     )
-    Start-Hwinfo -Folder $Folder -HwinfoExe $HwinfoExe
+    Start-Hwinfo -Folder $Folder -HwinfoExe $HwinfoExe -Priority $Priority
     Invoke-Wait -Duration $Duration
     Stop-Hwinfo
 }
@@ -237,7 +241,7 @@ function Invoke-HwinfoCinebench {
         [Parameter(Mandatory)][String]$Priority,
         [Parameter(Mandatory)][String]$Duration
     )
-    Start-Hwinfo -Folder $Folder -HwinfoExe $HwinfoExe
+    Start-Hwinfo -Folder $Folder -HwinfoExe $HwinfoExe -Priority $Priority
     Invoke-Cinebench -Folder $Folder -CinebenchExe $CinebenchExe -Priority $Priority -Duration $Duration
     Stop-Hwinfo
 }
@@ -249,7 +253,7 @@ function Invoke-HwinfoOCCT {
         [Parameter(Mandatory)][String]$OCCTExe,
         [Parameter(Mandatory)][String]$Priority
     )
-    Start-Hwinfo -Folder $Folder -HwinfoExe $HwinfoExe
+    Start-Hwinfo -Folder $Folder -HwinfoExe $HwinfoExe -Priority $Priority
     Invoke-OCCT -OCCTExe $OCCTExe -Priority $Priority
     Stop-Hwinfo
 }
@@ -262,7 +266,7 @@ function Invoke-HwinfoPrime95 {
         [Parameter(Mandatory)][String]$Priority,
         [Parameter(Mandatory)][Int32]$Duration
     )
-    Start-Hwinfo -Folder $Folder -HwinfoExe $HwinfoExe
+    Start-Hwinfo -Folder $Folder -HwinfoExe $HwinfoExe -Priority $Priority
     Invoke-Prime95 -Prime95Exe $Prime95Exe -Priority $Priority -Duration $Duration
     Stop-Hwinfo
 }
@@ -274,7 +278,7 @@ function Invoke-BenchKit {
         [Parameter(Mandatory)][String]$CinebenchExe,
         [Parameter(Mandatory)][String]$OCCTExe,
         [Parameter(Mandatory)][String]$Prime95Exe,
-        [String]$Priority = "Above Normal",
+        [String]$Priority = "AboveNormal",
         [Int32]$IdleDuration = 1200,
         [Int32]$CinebenchDuration = 1200,
         [Int32]$Prime95Duration = 1200
@@ -284,7 +288,7 @@ function Invoke-BenchKit {
         New-Item -Path $Folder -ItemType "directory" -Force
     }
     Stop-BackgroundApps
-    Invoke-HwinfoIdle -Folder "$Folder\idle" -HwinfoExe $HwinfoExe -Duration $IdleDuration
+    Invoke-HwinfoIdle -Folder "$Folder\idle" -HwinfoExe $HwinfoExe -Priority $Priority -Duration $IdleDuration
     Stop-BackgroundApps
     Invoke-HwinfoCinebench -Folder "$Folder\bench_cine_cpu" -HwinfoExe $HwinfoExe -CinebenchExe $CinebenchExe -Priority $Priority -Duration $CinebenchDuration
     Stop-BackgroundApps
