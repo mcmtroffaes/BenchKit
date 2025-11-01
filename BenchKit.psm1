@@ -89,7 +89,7 @@ function Start-Hwinfo {
         [Parameter(Mandatory)][String]$HwinfoExe,
         [Parameter(Mandatory)][String]$Priority
     )
-    $csv = "$Folder\hwinfo.csv"
+    $csv = Join-Path $Folder "hwinfo.csv"
     if (-not (Test-Path $Folder)) {
         Write-Host "Creating folder '$Folder'..."
         New-Item -Path $Folder -ItemType "directory" -Force
@@ -181,13 +181,13 @@ function Invoke-Cinebench {
         [Parameter(Mandatory)][String]$Priority,
         [Parameter(Mandatory)][Int32]$Duration
     )
-    $log = "$Folder\cinebench.log"
+    $log = Join-Path $Folder "cinebench.log"
     if (Test-Path $log) {
         Write-Host "Removing existing '$log'..."
         Remove-Item $log -Force -ErrorAction Stop
     }
     Write-Host "Starting Cinebench..."
-    & $PSScriptRoot\start-cmd.bat "$log" "$CinebenchExe" "g_CinebenchCpuXTest=true" "g_CinebenchMinimumTestDuration=$Duration"
+    & (Join-Path $PSScriptRoot "start-cmd.bat") "$log" "$CinebenchExe" "g_CinebenchCpuXTest=true" "g_CinebenchMinimumTestDuration=$Duration"
     Write-Host "Waiting for '$log' to appear..."
     while (-not (Test-Path $log)) {
         Start-Sleep -Milliseconds 200
@@ -199,7 +199,7 @@ function Invoke-Cinebench {
     Set-ProcessPriority -Name Cinebench -Priority $Priority
     Write-Host "Waiting for Cinebench to complete..."
     Wait-Process -Name Cinebench
-    Find-CinebenchValues -LogFile $log -OutputFile "$Folder\score.txt"
+    Find-CinebenchValues -LogFile $log -OutputFile (Join-Path $Folder "score.txt")
 }
 
 function Invoke-OCCT {
@@ -337,16 +337,29 @@ function Invoke-BenchKit {
         New-Item -Path $Folder -ItemType "directory" -Force
     }
     Stop-BackgroundApps
-    Invoke-HwinfoIdle -Folder "$Folder\idle" -HwinfoExe $HwinfoExe -Priority $Priority -Duration $IdleDuration
-    Stop-BackgroundApps
-    Invoke-HwinfoCinebench -Folder "$Folder\bench_cine_cpu" -HwinfoExe $HwinfoExe -CinebenchExe $CinebenchExe -Priority $Priority -Duration $CinebenchDuration
-    Stop-BackgroundApps
-    Invoke-HwinfoOCCT -Folder "$Folder\bench_occt_cpu" -HwinfoExe $HwinfoExe -OCCTExe $OCCTExe -Priority $Priority
-    Stop-BackgroundApps
-    Invoke-HwinfoOCCT -Folder "$Folder\bench_occt_ram" -HwinfoExe $HwinfoExe -OCCTExe $OCCTExe -Priority $Priority
-    Stop-BackgroundApps
-    Invoke-HwinfoOCCT -Folder "$Folder\stab_occt_cpu" -HwinfoExe $HwinfoExe -OCCTExe $OCCTExe -Priority $Priority
-    Stop-BackgroundApps
-    Invoke-HwinfoPrime95 -Folder "$Folder\stab_prime95" -HwinfoExe $HwinfoExe -Prime95Exe $Prime95Exe -Priority $Priority -Duration $Prime95Duration
-    Write-Host "Please reboot to restore background services."
+    $subfolder = Join-Path $Folder "idle"
+    if (-not (Test-Path $subfolder)) {
+        Invoke-HwinfoIdle -Folder $subfolder -HwinfoExe $HwinfoExe -Priority $Priority -Duration $IdleDuration
+    }
+    $subfolder = Join-Path $Folder "bench_cine_cpu"
+    if (-not (Test-Path $subfolder)) {
+        Invoke-HwinfoCinebench -Folder $subfolder -HwinfoExe $HwinfoExe -CinebenchExe $CinebenchExe -Priority $Priority -Duration $CinebenchDuration
+    }
+    $subfolder = Join-Path $Folder "bench_occt_cpu"
+    if (-not (Test-Path $subfolder)) {
+        Invoke-HwinfoOCCT -Folder $subfolder -HwinfoExe $HwinfoExe -OCCTExe $OCCTExe -Priority $Priority
+    }
+    $subfolder = Join-Path $Folder "bench_occt_ram"
+    if (-not (Test-Path $subfolder)) {
+        Invoke-HwinfoOCCT -Folder $subfolder -HwinfoExe $HwinfoExe -OCCTExe $OCCTExe -Priority $Priority
+    }
+    $subfolder = Join-Path $Folder "stab_occt_cpu"
+    if (-not (Test-Path $subfolder)) {
+        Invoke-HwinfoOCCT -Folder $subfolder -HwinfoExe $HwinfoExe -OCCTExe $OCCTExe -Priority $Priority
+    }
+    $subfolder = Join-Path $Folder "stab_prime95"
+    if (-not (Test-Path $subfolder)) {
+        Invoke-HwinfoPrime95 -Folder $subfolder -HwinfoExe $HwinfoExe -Prime95Exe $Prime95Exe -Priority $Priority -Duration $Prime95Duration
+    }
+    Write-Host "Please reboot to restore background services"
 }
