@@ -4,7 +4,7 @@ function Stop-App {
     )
     $proc = Get-Process -Name $AppName -ErrorAction SilentlyContinue
     if (-not $proc) { return }
-    Write-Host "Closing $AppName..."
+    Write-Host "Closing application: $AppName"
     switch ($AppName) {
         "OneDrive" {
             & $proc[0].MainModule.Filename /shutdown
@@ -32,14 +32,37 @@ function Stop-App {
 
 function Stop-BackgroundApps {
     param(
-        [String[]]$AppsToClose = @("OneDrive", "Steam", "Discord", "Brave", "GoXLR App", "GoXLRAudioCplApp", "RTSS")
+        [String[]]$AppsToClose = @("OneDrive", "Steam", "Discord", "Brave", "GoXLR App", "GoXLRAudioCplApp", "RTSS"),
+        [String[]]$ServicesToStop = @(
+            'ADPSvc','ALG','AMD Crash Defender Service','AMD External Events Utility','amd3dvcacheSvc',
+            'AmdAppCompatSvc','AmdPpkgSvc','AppReadiness','AppXSvc','ApxSvc','AsusUpdateCheck',
+            'autotimesvc','AxInstSV','BcastDVRUserService_*','BEService','BluetoothUserService_*',
+            'brave','BraveElevationService','bravem','CDPSvc','CDPUserSvc_*','CloudBackupRestoreSvc_*',
+            'DiagTrack','dmwappushservice','DoSvc','edgeupdate','edgeupdatem','EntAppSvc','fhsvc',
+            'FileSyncHelper','GameInputSvc','GraphicsPerfSvc','InstallService','InventorySvc',
+            'logi_lamparray_service','LxpSvc','MapsBroker','MicrosoftEdgeElevationService',
+            'OneDrive Updater Service','OneSyncSvc_*','PcaSvc','PhoneSvc','PimIndexMaintenanceSvc_*',
+            'PushToInstall','RasAuto','RasMan','refsdedupsvc','RemoteRegistry','Rockstar Service',
+            'Spooler','Steam Client Service','SysMain','TroubleshootingSvc','UnistoreSvc_*','UsoSvc',
+            'VaultSvc','VSInstallerElevationService','WaaSMedicSvc','WpnService','WpnUserService_*',
+            'WSearch','wuauserv','XblAuthManager','XblGameSave','XboxGipSvc','XboxNetApiSvc'
+        )
     )
-
-    Write-Host "Checking for running background apps..."
     foreach ($app in $AppsToClose) {
         Stop-App -AppName $app
     }
-    Write-Host "Background apps closed."
+    foreach ($svc in Get-Service) {
+        foreach ($pattern in $ServicesToStop) {
+            if ($svc.Name -like $pattern -and $svc.Status -eq 'Running') {
+                try {
+                    Write-Host "Stopping service: $($svc.Name) ($($svc.DisplayName))"
+                    Stop-Service -Name $svc.Name
+                } catch {
+                    Write-Warning "Could not stop service: $($svc.Name) ($($svc.DisplayName))"
+                }
+            }
+        }
+    }
 }
 
 function Set-ProcessPriority {
@@ -106,6 +129,40 @@ function Invoke-Wait {
     }
 }
 
+function Find-CinebenchValues {
+    param(
+        [Parameter(Mandatory)][String]$LogFile,
+        [Parameter(Mandatory)][String]$OutputFile
+    )
+    if (-not (Test-Path $LogFile)) {
+        Write-Error "Log file not found: $LogFile"
+        return
+    }
+    $content = Get-Content $LogFile
+    $line = ($content | Select-String -Pattern '^Values:' | Select-Object -Last 1).Line
+    if ($line -match '\{([0-9\., ]+)\}') {
+        $numbers = $matches[1] -split ',' | ForEach-Object { [Double]($_.Trim()) }
+        $avg = ($numbers | Measure-Object -Average).Average
+        $n = $numbers.Count
+        if ($n -gt 1) {
+            $variance = ($numbers | ForEach-Object { [Math]::Pow($_ - $avg, 2) } | Measure-Object -Sum).Sum / ($n - 1)
+            $stddev = [Math]::Sqrt($variance)
+        } else {
+            Write-Warning "Need at least two runs to calculate sample standard deviation."
+            $stddev = 0
+        }
+        $outputText = @(
+            "=== $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ===",
+            "Scores: $($numbers -join ', ')",
+            ("Average: {0:F3}" -f $avg),
+            ("Sample Standard Deviation: {0:F3}" -f $stddev)
+        )
+        $outputText | Out-File -FilePath $OutputFile -Encoding UTF8
+    } else {
+        Write-Warning "No values found in log."
+    }
+}
+
 function Invoke-Cinebench {
     param(
         [Parameter(Mandatory)][String]$Folder,
@@ -131,6 +188,7 @@ function Invoke-Cinebench {
     Set-ProcessPriority -Name Cinebench -Priority $Priority
     Write-Host "Waiting for Cinebench to complete..."
     Wait-Process -Name Cinebench
+    Find-CinebenchValues -LogFile $log -OutputFile "$Folder\score.txt"
 }
 
 function Invoke-OCCT {
@@ -216,20 +274,26 @@ function Invoke-BenchKit {
         [Parameter(Mandatory)][String]$CinebenchExe,
         [Parameter(Mandatory)][String]$OCCTExe,
         [Parameter(Mandatory)][String]$Prime95Exe,
-        [String]$Priority = "High",
-        [Int32]$IdleDuration = 600,
-        [Int32]$CinebenchDuration = 900,
-        [Int32]$Prime95Duration = 600
+        [String]$Priority = "Above Normal",
+        [Int32]$IdleDuration = 1200,
+        [Int32]$CinebenchDuration = 1200,
+        [Int32]$Prime95Duration = 1200
     )
-    Stop-BackgroundApps
     if (-not (Test-Path $Folder)) {
         Write-Host "Creating folder '$Folder'..."
         New-Item -Path $Folder -ItemType "directory" -Force
     }
+    Stop-BackgroundApps
     Invoke-HwinfoIdle -Folder "$Folder\idle" -HwinfoExe $HwinfoExe -Duration $IdleDuration
+    Stop-BackgroundApps
     Invoke-HwinfoCinebench -Folder "$Folder\bench_cine_cpu" -HwinfoExe $HwinfoExe -CinebenchExe $CinebenchExe -Priority $Priority -Duration $CinebenchDuration
+    Stop-BackgroundApps
     Invoke-HwinfoOCCT -Folder "$Folder\bench_occt_cpu" -HwinfoExe $HwinfoExe -OCCTExe $OCCTExe -Priority $Priority
+    Stop-BackgroundApps
     Invoke-HwinfoOCCT -Folder "$Folder\bench_occt_ram" -HwinfoExe $HwinfoExe -OCCTExe $OCCTExe -Priority $Priority
+    Stop-BackgroundApps
     Invoke-HwinfoOCCT -Folder "$Folder\stab_occt_cpu" -HwinfoExe $HwinfoExe -OCCTExe $OCCTExe -Priority $Priority
+    Stop-BackgroundApps
     Invoke-HwinfoPrime95 -Folder "$Folder\stab_prime95" -HwinfoExe $HwinfoExe -Prime95Exe $Prime95Exe -Priority $Priority -Duration $Prime95Duration
+    Write-Host "Please reboot to restore background services."
 }
