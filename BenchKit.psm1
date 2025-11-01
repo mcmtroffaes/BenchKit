@@ -122,14 +122,22 @@ function Stop-Hwinfo {
 
 function Invoke-Wait {
     param(
-        [Parameter(Mandatory)][Int32]$Duration
+        [Parameter(Mandatory)][Int32]$Duration,
+        [Parameter(Mandatory = $false)][ScriptBlock]$Callback
     )
     [Int32]$interval = 10
     for ($remaining = $Duration; $remaining -gt 0; $remaining -= $interval) {
         Write-Progress -Activity "Sleep" -Status "Waiting" -PercentComplete (100 - (100 * $remaining / $Duration)) -SecondsRemaining $remaining
         Start-Sleep -Seconds $interval
+        if ($Callback) {
+            $result = & $Callback
+            if ($result -eq $false) {
+                Write-Progress -Activity "Sleep" -Status "Aborted" -PercentComplete (100 - (100 * $remaining / $Duration)) -SecondsRemaining 0 -Completed
+                return
+            }
+        }
     }
-    Write-Progress -Activity "Sleep" -Status "Finished" -PercentComplete 100 -SecondsRemaining 0
+    Write-Progress -Activity "Sleep" -Status "Finished" -PercentComplete 100 -SecondsRemaining 0 -Completed
 }
 
 function Find-CinebenchValues {
@@ -209,6 +217,7 @@ function Invoke-OCCT {
 
 function Invoke-Prime95 {
     param(
+        [Parameter(Mandatory)][String]$Folder,
         [Parameter(Mandatory)][String]$Prime95Exe,
         [Parameter(Mandatory)][String]$Priority,
         [Parameter(Mandatory)][Int32]$Duration
@@ -241,17 +250,23 @@ function Invoke-Prime95 {
     & $Prime95Exe -t8
     Start-Sleep -Seconds 5
     Set-ProcessPriority -Name Prime95 -Priority $Priority
-    Invoke-Wait -Duration $Duration
+    Invoke-Wait -Duration $Duration -Callback {
+        if (Test-Path $resultsTxt) {
+            if ((Get-Content $resultsTxt) -contains "FATAL ERROR") {
+                Write-Error "Prime95 had fatal errors, system might be unstable"
+                return $false
+            }
+        }
+        return $true
+    }
     taskkill.exe /im "Prime95.exe"
     Start-Sleep -Seconds 5
     if (-not (Test-Path $resultsTxt)) {
-        Write-Warning "results.txt not found in $primeDir"
+        Write-Warning "$resultsTxt not found"
     } else {
-        if ((Get-Content $resultsTxt) -contains "FATAL ERROR") {
-            Write-Error "Prime95 had fatal errors, system might be unstable."
-        } else {
-            Write-Host "Prime95 reported no errors."
-        }
+        $destPath = Join-Path $Folder "results.txt"
+        Move-Item -Path $resultsTxt -Destination $destPath -Force
+        Write-Host "Moved results file to $destPath"
     }
 }
 
@@ -301,7 +316,7 @@ function Invoke-HwinfoPrime95 {
         [Parameter(Mandatory)][Int32]$Duration
     )
     Start-Hwinfo -Folder $Folder -HwinfoExe $HwinfoExe -Priority $Priority
-    Invoke-Prime95 -Prime95Exe $Prime95Exe -Priority $Priority -Duration $Duration
+    Invoke-Prime95 -Folder $Folder -Prime95Exe $Prime95Exe -Priority $Priority -Duration $Duration
     Stop-Hwinfo
 }
 
