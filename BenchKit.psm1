@@ -122,22 +122,23 @@ function Stop-Hwinfo {
 
 function Invoke-Wait {
     param(
+        [Parameter(Mandatory)][String]$Activity,
         [Parameter(Mandatory)][Int32]$Duration,
         [Parameter(Mandatory = $false)][ScriptBlock]$Callback
     )
     [Int32]$interval = 10
     for ($remaining = $Duration; $remaining -gt 0; $remaining -= $interval) {
-        Write-Progress -Activity "Sleep" -Status "Waiting" -PercentComplete (100 - (100 * $remaining / $Duration)) -SecondsRemaining $remaining
+        Write-Progress -Activity $Activity -Status "Running" -PercentComplete (100 - (100 * $remaining / $Duration)) -SecondsRemaining $remaining
         Start-Sleep -Seconds $interval
         if ($Callback) {
             $result = & $Callback
             if ($result -eq $false) {
-                Write-Progress -Activity "Sleep" -Status "Aborted" -PercentComplete (100 - (100 * $remaining / $Duration)) -SecondsRemaining 0 -Completed
+                Write-Progress -Activity $Activity -Status "Aborted" -PercentComplete (100 - (100 * $remaining / $Duration)) -SecondsRemaining 0 -Completed
                 return
             }
         }
     }
-    Write-Progress -Activity "Sleep" -Status "Finished" -PercentComplete 100 -SecondsRemaining 0 -Completed
+    Write-Progress -Activity $Activity -Status "Finished" -PercentComplete 100 -SecondsRemaining 0 -Completed
 }
 
 function Find-CinebenchValues {
@@ -197,6 +198,7 @@ function Invoke-Cinebench {
         Start-Sleep -Milliseconds 200
     }
     Set-ProcessPriority -Name Cinebench -Priority $Priority
+    Invoke-Wait -Activity "Cinebench" -Duration $Duration
     Write-Host "Waiting for Cinebench to complete..."
     Wait-Process -Name Cinebench
     Find-CinebenchValues -LogFile $log -OutputFile (Join-Path $Folder "score.txt")
@@ -250,7 +252,7 @@ function Invoke-Prime95 {
     & $Prime95Exe -t8
     Start-Sleep -Seconds 5
     Set-ProcessPriority -Name Prime95 -Priority $Priority
-    Invoke-Wait -Duration $Duration -Callback {
+    Invoke-Wait -Activity "Prime95" -Duration $Duration -Callback {
         if (Test-Path $resultsTxt) {
             if ((Get-Content $resultsTxt) -contains "FATAL ERROR") {
                 Write-Error "Prime95 had fatal errors, system might be unstable"
@@ -278,7 +280,7 @@ function Invoke-HwinfoIdle {
         [Parameter(Mandatory)][String]$Duration
     )
     Start-Hwinfo -Folder $Folder -HwinfoExe $HwinfoExe -Priority $Priority
-    Invoke-Wait -Duration $Duration
+    Invoke-Wait -Activity "Idle" -Duration $Duration
     Stop-Hwinfo
 }
 
