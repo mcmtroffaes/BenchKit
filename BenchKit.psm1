@@ -83,6 +83,24 @@ function Set-ProcessPriority {
     }
 }
 
+function Set-ProcessAffinity {
+    param(
+        [Parameter(Mandatory)][String]$Name,
+        [Parameter(Mandatory)][Int32]$Affinity
+    )
+    Write-Host "Setting affinity of $Name to $Affinity..."
+    $process = Get-Process $Name -ErrorAction SilentlyContinue
+    if ($process) {
+        try {
+            $process.ProcessorAffinity = $Affinity
+        } catch {
+            Write-Warning "Failed to change affinity: $($_.Exception.Message)"
+        }
+    } else {
+        Write-Warning "$Name process not found. Skipping affinity change."
+    }
+}
+
 function Start-Hwinfo {
     param(
         [Parameter(Mandatory)][String]$Folder,
@@ -223,7 +241,9 @@ function Invoke-Prime95 {
         [Parameter(Mandatory)][String]$Folder,
         [Parameter(Mandatory)][String]$Prime95Exe,
         [Parameter(Mandatory)][String]$Priority,
-        [Parameter(Mandatory)][Int32]$Duration
+        [Parameter(Mandatory)][Int32]$Duration,
+        [Parameter(Mandatory)][Int32]$Threads,
+        [Parameter(Mandatory)][Int32]$Affinity
     )
     $requiredLines = @(
         'CpuSupportsAVX=0',
@@ -250,9 +270,10 @@ function Invoke-Prime95 {
     $resultsTxt = Join-Path $primeDir "results.txt"
     Remove-Item -Path $resultsTxt -ErrorAction SilentlyContinue
     Write-Host "Starting Prime95..."
-    & $Prime95Exe -t8
+    & $Prime95Exe "-t$Threads"
     Start-Sleep -Seconds 5
     Set-ProcessPriority -Name Prime95 -Priority $Priority
+    Set-ProcessAffinity -Name Prime95 -Affinity $Affinity
     Invoke-Wait -Activity "Prime95" -Duration $Duration -Callback {
         if (Test-Path $resultsTxt) {
             if ((Get-Content $resultsTxt) -contains "FATAL ERROR") {
@@ -317,10 +338,12 @@ function Invoke-HwinfoPrime95 {
         [Parameter(Mandatory)][String]$HwinfoExe,
         [Parameter(Mandatory)][String]$Prime95Exe,
         [Parameter(Mandatory)][String]$Priority,
-        [Parameter(Mandatory)][Int32]$Duration
+        [Parameter(Mandatory)][Int32]$Duration,
+        [Parameter(Mandatory)][Int32]$Threads,
+        [Parameter(Mandatory)][Int32]$Affinity
     )
     Start-Hwinfo -Folder $Folder -HwinfoExe $HwinfoExe -Priority $Priority
-    Invoke-Prime95 -Folder $Folder -Prime95Exe $Prime95Exe -Priority $Priority -Duration $Duration
+    Invoke-Prime95 -Folder $Folder -Prime95Exe $Prime95Exe -Priority $Priority -Duration $Duration -Threads $Threads -Affinity $Affinity
     Stop-Hwinfo
 }
 
@@ -367,7 +390,21 @@ function Invoke-BenchKit {
     }
     $subfolder = Join-Path $Folder "stab_prime95"
     if (-not (Test-Path $subfolder)) {
-        Invoke-HwinfoPrime95 -Folder $subfolder -HwinfoExe $HwinfoExe -Prime95Exe $Prime95Exe -Priority $Priority -Duration $Prime95Duration
+        Invoke-HwinfoPrime95 -Folder $subfolder -HwinfoExe $HwinfoExe -Prime95Exe $Prime95Exe -Priority $Priority -Duration $Prime95Duration -Threads 8 -Affinity 0xFFFF
+    }
+    for ($core = 0; $i -lt 8; $core++) {
+        $affinity = 0x3 -shl (2 * $i)
+        $subfolder = Join-Path $Folder ("stab_prime95_core{0}" -f $core)
+        if (-not (Test-Path $subfolder)) {
+            Invoke-HwinfoPrime95 `
+                -Folder $subfolder `
+                -HwinfoExe $HwinfoExe `
+                -Prime95Exe $Prime95Exe `
+                -Priority $Priority `
+                -Duration $Prime95Duration `
+                -Threads 1 `
+                -Affinity $affinity
+        }
     }
     Write-Host "Please reboot to restore background services"
 }
