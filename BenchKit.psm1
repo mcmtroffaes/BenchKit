@@ -242,7 +242,7 @@ function Invoke-Prime95 {
         [Parameter(Mandatory)][String]$Prime95Exe,
         [Parameter(Mandatory)][String]$Priority,
         [Parameter(Mandatory)][Int32]$Duration,
-        [Parameter(Mandatory)][Int32]$Threads,
+        [Parameter(Mandatory)][Int32]$Cores,
         [Parameter(Mandatory)][Int32]$Affinity
     )
     $requiredLines = @(
@@ -261,16 +261,19 @@ function Invoke-Prime95 {
     $content = Get-Content $primeTxt -ErrorAction Stop
     foreach ($line in $requiredLines) {
         if (-not ($content -contains $line)) {
-            Write-Error "Missing required line in prime.txt: '$line'"
-            Write-Host "Please ensure the following settings are present in prime.txt before running:"
-            $requiredLines | ForEach-Object { Write-Host "$_" }
-            return
+            $content = @($line) + $content
         }
     }
+    if ($content -match '^NumCPUs=') {
+        $content = $content -replace "^NumCPUs=.*", "NumCPUs=$Cores"
+    } else {
+        $content = @("NumCPUs=$Cores") + $content
+    }
+    Set-Content $primeTxt $content
     $resultsTxt = Join-Path $primeDir "results.txt"
     Remove-Item -Path $resultsTxt -ErrorAction SilentlyContinue
     Write-Host "Starting Prime95..."
-    & $Prime95Exe "-t$Threads"
+    & $Prime95Exe "-t$Cores"
     Start-Sleep -Seconds 5
     Set-ProcessPriority -Name Prime95 -Priority $Priority
     Set-ProcessAffinity -Name Prime95 -Affinity $Affinity
@@ -339,11 +342,11 @@ function Invoke-HwinfoPrime95 {
         [Parameter(Mandatory)][String]$Prime95Exe,
         [Parameter(Mandatory)][String]$Priority,
         [Parameter(Mandatory)][Int32]$Duration,
-        [Parameter(Mandatory)][Int32]$Threads,
+        [Parameter(Mandatory)][Int32]$Cores,
         [Parameter(Mandatory)][Int32]$Affinity
     )
     Start-Hwinfo -Folder $Folder -HwinfoExe $HwinfoExe -Priority $Priority
-    Invoke-Prime95 -Folder $Folder -Prime95Exe $Prime95Exe -Priority $Priority -Duration $Duration -Threads $Threads -Affinity $Affinity
+    Invoke-Prime95 -Folder $Folder -Prime95Exe $Prime95Exe -Priority $Priority -Duration $Duration -Cores $Cores -Affinity $Affinity
     Stop-Hwinfo
 }
 
@@ -357,7 +360,8 @@ function Invoke-BenchKit {
         [String]$Priority = "AboveNormal",
         [Int32]$IdleDuration = 1200,
         [Int32]$CinebenchDuration = 1200,
-        [Int32]$Prime95Duration = 1200
+        [Int32]$Prime95Duration = 1200,
+        [Int32]$Cores = 8
     )
     if (-not (Test-Path $Folder)) {
         Write-Host "Creating folder '$Folder'..."
@@ -390,10 +394,10 @@ function Invoke-BenchKit {
     }
     $subfolder = Join-Path $Folder "stab_prime95"
     if (-not (Test-Path $subfolder)) {
-        Invoke-HwinfoPrime95 -Folder $subfolder -HwinfoExe $HwinfoExe -Prime95Exe $Prime95Exe -Priority $Priority -Duration $Prime95Duration -Threads 8 -Affinity 0xFFFF
+        Invoke-HwinfoPrime95 -Folder $subfolder -HwinfoExe $HwinfoExe -Prime95Exe $Prime95Exe -Priority $Priority -Duration $Prime95Duration -Cores $Cores -Affinity ((1 -shl ($Cores * 2)) - 1)
     }
-    for ($core = 0; $i -lt 8; $core++) {
-        $affinity = 0x3 -shl (2 * $i)
+    for ($core = 0; $i -lt $Cores; $core++) {
+        $affinity = 0x3 -shl (2 * $core)
         $subfolder = Join-Path $Folder ("stab_prime95_core{0}" -f $core)
         if (-not (Test-Path $subfolder)) {
             Invoke-HwinfoPrime95 `
@@ -402,7 +406,7 @@ function Invoke-BenchKit {
                 -Prime95Exe $Prime95Exe `
                 -Priority $Priority `
                 -Duration $Prime95Duration `
-                -Threads 1 `
+                -Cores 1 `
                 -Affinity $affinity
         }
     }
