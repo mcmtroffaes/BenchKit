@@ -361,7 +361,7 @@ function Invoke-BenchKit {
     if (-not (Test-Path $subfolder)) {
         Invoke-HwinfoOCCT -Folder $subfolder -HwinfoExe $HwinfoExe -OCCTExe $OCCTExe -Priority $Priority
     }
-    $subfolder = Join-Path $Folder "stab_occt_cpu"
+    $subfolder = Join-Path $Folder "stab_occt_cpuram"
     if (-not (Test-Path $subfolder)) {
         Invoke-HwinfoOCCT -Folder $subfolder -HwinfoExe $HwinfoExe -OCCTExe $OCCTExe -Priority $Priority
     }
