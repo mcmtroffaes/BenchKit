@@ -181,7 +181,7 @@ function Invoke-Cinebench {
         [Parameter(Mandatory)][String]$CinebenchExe,
         [Parameter(Mandatory)][String]$Priority,
         [Parameter(Mandatory)][Int32]$Duration,
-        [Parameter(Mandatory)][Int32]$Arg
+        [Parameter(Mandatory)][String]$Arg
     )
     $log = Join-Path $Folder "cinebench.log"
     if (Test-Path $log) {
@@ -292,7 +292,7 @@ function Invoke-HwinfoCinebench {
         [Parameter(Mandatory)][String]$CinebenchExe,
         [Parameter(Mandatory)][String]$Priority,
         [Parameter(Mandatory)][String]$Duration,
-        [Parameter(Mandatory)][Int32]$Arg
+        [Parameter(Mandatory)][String]$Arg
     )
     Start-Hwinfo -Folder $Folder -HwinfoExe $HwinfoExe -Priority $Priority
     Invoke-Cinebench -Folder $Folder -CinebenchExe $CinebenchExe -Priority $Priority -Duration $Duration -Arg $Arg
