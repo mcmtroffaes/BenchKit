@@ -180,7 +180,8 @@ function Invoke-Cinebench {
         [Parameter(Mandatory)][String]$Folder,
         [Parameter(Mandatory)][String]$CinebenchExe,
         [Parameter(Mandatory)][String]$Priority,
-        [Parameter(Mandatory)][Int32]$Duration
+        [Parameter(Mandatory)][Int32]$Duration,
+        [Parameter(Mandatory)][Int32]$Arg
     )
     $log = Join-Path $Folder "cinebench.log"
     if (Test-Path $log) {
@@ -188,7 +189,7 @@ function Invoke-Cinebench {
         Remove-Item $log -Force -ErrorAction Stop
     }
     Write-Host "Starting Cinebench..."
-    & (Join-Path $PSScriptRoot "start-cmd.bat") "$log" "$CinebenchExe" "g_CinebenchCpuXTest=true" "g_CinebenchMinimumTestDuration=$Duration"
+    & (Join-Path $PSScriptRoot "start-cmd.bat") "$log" "$CinebenchExe" "$Arg" "g_CinebenchMinimumTestDuration=$Duration"
     Write-Host "Waiting for '$log' to appear..."
     while (-not (Test-Path $log)) {
         Start-Sleep -Milliseconds 200
@@ -290,10 +291,11 @@ function Invoke-HwinfoCinebench {
         [Parameter(Mandatory)][String]$HwinfoExe,
         [Parameter(Mandatory)][String]$CinebenchExe,
         [Parameter(Mandatory)][String]$Priority,
-        [Parameter(Mandatory)][String]$Duration
+        [Parameter(Mandatory)][String]$Duration,
+        [Parameter(Mandatory)][Int32]$Arg
     )
     Start-Hwinfo -Folder $Folder -HwinfoExe $HwinfoExe -Priority $Priority
-    Invoke-Cinebench -Folder $Folder -CinebenchExe $CinebenchExe -Priority $Priority -Duration $Duration
+    Invoke-Cinebench -Folder $Folder -CinebenchExe $CinebenchExe -Priority $Priority -Duration $Duration -Arg $Arg
     Stop-Hwinfo
 }
 
@@ -343,9 +345,13 @@ function Invoke-BenchKit {
     if (-not (Test-Path $subfolder)) {
         Invoke-HwinfoIdle -Folder $subfolder -HwinfoExe $HwinfoExe -Priority $Priority -Duration $IdleDuration
     }
-    $subfolder = Join-Path $Folder "bench_cine_cpu"
+    $subfolder = Join-Path $Folder "bench_cine_cpu1"
     if (-not (Test-Path $subfolder)) {
-        Invoke-HwinfoCinebench -Folder $subfolder -HwinfoExe $HwinfoExe -CinebenchExe $CinebenchExe -Priority $Priority -Duration $CinebenchDuration
+        Invoke-HwinfoCinebench -Folder $subfolder -HwinfoExe $HwinfoExe -CinebenchExe $CinebenchExe -Priority $Priority -Duration $CinebenchDuration -Arg "g_CinebenchCpu1Test=true"
+    }
+    $subfolder = Join-Path $Folder "bench_cine_cpux"
+    if (-not (Test-Path $subfolder)) {
+        Invoke-HwinfoCinebench -Folder $subfolder -HwinfoExe $HwinfoExe -CinebenchExe $CinebenchExe -Priority $Priority -Duration $CinebenchDuration -Arg "g_CinebenchCpuXTest=true"
     }
     $subfolder = Join-Path $Folder "bench_occt_cpu"
     if (-not (Test-Path $subfolder)) {
