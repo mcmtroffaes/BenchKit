@@ -273,7 +273,7 @@ function Invoke-Prime95 {
     $resultsTxt = Join-Path $primeDir "results.txt"
     Remove-Item -Path $resultsTxt -ErrorAction SilentlyContinue
     Write-Host "Starting Prime95..."
-    & $Prime95Exe "-t$Cores"
+    & $Prime95Exe "-t"
     Start-Sleep -Seconds 5
     Set-ProcessPriority -Name Prime95 -Priority $Priority
     Set-ProcessAffinity -Name Prime95 -Affinity $Affinity
