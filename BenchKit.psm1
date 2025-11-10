@@ -297,6 +297,36 @@ function Invoke-Prime95 {
     }
 }
 
+function Invoke-Cyberpunk {
+    param(
+        [Parameter(Mandatory)][String]$Folder,
+        [Parameter(Mandatory)][String]$CyberpunkExe,
+        [Parameter(Mandatory)][String]$Priority
+    )
+    $log = Join-Path $Folder "summary.json"
+    if (Test-Path $log) {
+        Write-Host "Removing existing '$log'..."
+        Remove-Item $log -Force -ErrorAction Stop
+    }
+    $resultsrootfolder = Join-Path $([Environment]::GetFolderPath('MyDocuments')) "CD Projekt Red\Cyberpunk 2077\benchmarkResults"
+    if (Test-Path $resultsrootfolder) {
+        Write-Host "Removing old benchmark results folder: $resultsrootfolder"
+        Remove-Item $resultsrootfolder -Recurse -Force
+    }
+    Write-Host "Starting Cyberpunk..."
+    & "$CyberpunkExe" "-benchmark"
+    Start-Sleep -Seconds 5
+    Set-ProcessPriority -Name Cyberpunk2077 -Priority $Priority
+    Write-Host "Waiting for Cyberpunk to complete..."
+    Wait-Process -Name Cyberpunk2077
+    if (Test-Path $resultsrootfolder) {
+        $resultsfolder = Get-ChildItem -Directory $resultsrootfolder | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        Copy-Item -Path (Join-Path $resultsfolder.FullName "summary.json") -Destination $log
+    } else {
+        Write-Error "Benchmark results folder not found: $resultsrootfolder"
+    }
+}
+
 function Invoke-HwinfoIdle {
     param(
         [Parameter(Mandatory)][String]$Folder,
@@ -350,6 +380,18 @@ function Invoke-HwinfoPrime95 {
     Stop-Hwinfo
 }
 
+function Invoke-HwinfoCyberpunk {
+    param(
+        [Parameter(Mandatory)][String]$Folder,
+        [Parameter(Mandatory)][String]$HwinfoExe,
+        [Parameter(Mandatory)][String]$CyberpunkExe,
+        [Parameter(Mandatory)][String]$Priority
+    )
+    Start-Hwinfo -Folder $Folder -HwinfoExe $HwinfoExe -Priority $Priority
+    Invoke-Cyberpunk -Folder $Folder -CyberpunkExe $CyberpunkExe -Priority $Priority
+    Stop-Hwinfo
+}
+
 function Invoke-BenchKit {
     param(
         [Parameter(Mandatory)][String]$Folder,
@@ -357,6 +399,7 @@ function Invoke-BenchKit {
         [Parameter(Mandatory)][String]$CinebenchExe,
         [Parameter(Mandatory)][String]$OCCTExe,
         [Parameter(Mandatory)][String]$Prime95Exe,
+        [Parameter(Mandatory)][String]$CyberpunkExe,
         [String]$Priority = "AboveNormal",
         [Int32]$IdleDuration = 1200,
         [Int32]$CinebenchDuration = 1200,
@@ -371,6 +414,10 @@ function Invoke-BenchKit {
     $subfolder = Join-Path $Folder "idle"
     if (-not (Test-Path $subfolder)) {
         Invoke-HwinfoIdle -Folder $subfolder -HwinfoExe $HwinfoExe -Priority $Priority -Duration $IdleDuration
+    }
+    $subfolder = Join-Path $Folder "bench_cyberpunk"
+    if (-not (Test-Path $subfolder)) {
+        Invoke-HwinfoCyberpunk -Folder $subfolder -HwinfoExe $HwinfoExe -CyberpunkExe $CyberpunkExe -Priority $Priority
     }
     $subfolder = Join-Path $Folder "bench_cine_cpu1"
     if (-not (Test-Path $subfolder)) {
