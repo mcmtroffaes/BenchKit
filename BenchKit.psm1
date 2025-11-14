@@ -411,62 +411,70 @@ function Invoke-BenchKit {
         New-Item -Path $Folder -ItemType "directory" -Force
     }
     Stop-BackgroundApps
-    $subfolder = Join-Path $Folder "idle"
-    if (-not (Test-Path $subfolder)) {
-        Invoke-HwinfoIdle -Folder $subfolder -HwinfoExe $HwinfoExe -Priority $Priority -Duration $IdleDuration
-    }
-    $subfolder = Join-Path $Folder "bench_cyberpunk"
-    if (-not (Test-Path $subfolder)) {
-        Invoke-HwinfoCyberpunk -Folder $subfolder -HwinfoExe $HwinfoExe -CyberpunkExe $CyberpunkExe -Priority $Priority
-    }
-    $subfolder = Join-Path $Folder "bench_cine_cpu1"
-    if (-not (Test-Path $subfolder)) {
-        Invoke-HwinfoCinebench -Folder $subfolder -HwinfoExe $HwinfoExe -CinebenchExe $CinebenchExe -Priority $Priority -Duration $CinebenchDuration -Arg "g_CinebenchCpu1Test=true"
-    }
-    $subfolder = Join-Path $Folder "bench_cine_cpux"
-    if (-not (Test-Path $subfolder)) {
-        Invoke-HwinfoCinebench -Folder $subfolder -HwinfoExe $HwinfoExe -CinebenchExe $CinebenchExe -Priority $Priority -Duration $CinebenchDuration -Arg "g_CinebenchCpuXTest=true"
-    }
-    $subfolder = Join-Path $Folder "bench_occt_cpu"
-    if (-not (Test-Path $subfolder)) {
-        Invoke-HwinfoOCCT -Folder $subfolder -HwinfoExe $HwinfoExe -OCCTExe $OCCTExe -Priority $Priority
-    }
-    $subfolder = Join-Path $Folder "bench_occt_ram"
-    if (-not (Test-Path $subfolder)) {
-        Invoke-HwinfoOCCT -Folder $subfolder -HwinfoExe $HwinfoExe -OCCTExe $OCCTExe -Priority $Priority
-    }
-    $subfolder = Join-Path $Folder "stab_occt_cpuram"
-    if (-not (Test-Path $subfolder)) {
-        Invoke-HwinfoOCCT -Folder $subfolder -HwinfoExe $HwinfoExe -OCCTExe $OCCTExe -Priority $Priority
-    }
-    $subfolder = Join-Path $Folder "stab_occt_3dvar"
-    if (-not (Test-Path $subfolder)) {
-        Invoke-HwinfoOCCT -Folder $subfolder -HwinfoExe $HwinfoExe -OCCTExe $OCCTExe -Priority $Priority
-    }
-    $subfolder = Join-Path $Folder "stab_occt_3dswitch"
-    if (-not (Test-Path $subfolder)) {
-        Invoke-HwinfoOCCT -Folder $subfolder -HwinfoExe $HwinfoExe -OCCTExe $OCCTExe -Priority $Priority
-    }
-    $subfolder = Join-Path $Folder "stab_occt_vram"
-    if (-not (Test-Path $subfolder)) {
-        Invoke-HwinfoOCCT -Folder $subfolder -HwinfoExe $HwinfoExe -OCCTExe $OCCTExe -Priority $Priority
-    }
-    $subfolder = Join-Path $Folder "stab_prime95"
-    if (-not (Test-Path $subfolder)) {
-        Invoke-HwinfoPrime95 -Folder $subfolder -HwinfoExe $HwinfoExe -Prime95Exe $Prime95Exe -Priority $Priority -Duration $Prime95Duration -Cores $Cores -Affinity ((1 -shl ($Cores * 2)) - 1)
-    }
-    for ($core = 0; $i -lt $Cores; $core++) {
-        $affinity = 0x3 -shl (2 * $core)
-        $subfolder = Join-Path $Folder ("stab_prime95_core{0}" -f $core)
-        if (-not (Test-Path $subfolder)) {
-            Invoke-HwinfoPrime95 `
-                -Folder $subfolder `
-                -HwinfoExe $HwinfoExe `
-                -Prime95Exe $Prime95Exe `
-                -Priority $Priority `
-                -Duration $Prime95Duration `
-                -Cores 1 `
-                -Affinity $affinity
+    $jobs = @(
+        @{
+            Name = "idle"
+            Script = {
+                param($path)
+                Invoke-HwinfoIdle -Folder $path -HwinfoExe $HwinfoExe -Priority $Priority -Duration $IdleDuration
+            }
+        }
+
+        @{
+            Name = "bench_cyberpunk"
+            Script = {
+                param($path)
+                Invoke-HwinfoCyberpunk -Folder $path -HwinfoExe $HwinfoExe -CyberpunkExe $CyberpunkExe -Priority $Priority
+            }
+        }
+        @{
+            Name = "bench_cine_cpu1"
+            Script = {
+                param($path)
+                Invoke-HwinfoCinebench -Folder $path -HwinfoExe $HwinfoExe -CinebenchExe $CinebenchExe -Priority $Priority -Duration $CinebenchDuration -Arg "g_CinebenchCpu1Test=true"
+            }
+        }
+        @{
+            Name = "bench_cine_cpux"
+            Script = {
+                param($path)
+                Invoke-HwinfoCinebench -Folder $path -HwinfoExe $HwinfoExe -CinebenchExe $CinebenchExe -Priority $Priority -Duration $CinebenchDuration -Arg "g_CinebenchCpuXTest=true"
+            }
+        }
+        "bench_occt_cpu","bench_occt_ram","stab_occt_cpuram","stab_occt_3dvar","stab_occt_3dswitch","stab_occt_vram" | ForEach-Object {
+            @{
+                Name = $_
+                Script = {
+                    param($path)
+                    Invoke-HwinfoOCCT -Folder $path -HwinfoExe $HwinfoExe -OCCTExe $OCCTExe -Priority $Priority
+                }
+            }
+        }
+        @{
+            Name = "stab_prime95"
+            Script = {
+                param($path)
+                $affinity = ((1 -shl ($Cores * 2)) - 1)
+                Invoke-HwinfoPrime95 -Folder $path -HwinfoExe $HwinfoExe -Prime95Exe $Prime95Exe -Priority $Priority -Duration $Prime95Duration -Cores $Cores -Affinity $affinity
+            }
+        }
+        0..($Cores - 1) | ForEach-Object {
+            $core = $_
+            @{
+                Name = "stab_prime95_core$core"
+                Script = {
+                    param($path)
+                    $affinity = (0x3 -shl (2 * $core))
+                    Invoke-HwinfoPrime95 -Folder $path -HwinfoExe $HwinfoExe -Prime95Exe $Prime95Exe -Priority $Priority -Duration $Prime95Duration -Cores 1 -Affinity $affinity
+                }
+            }
+        }
+    )
+    foreach ($job in $jobs) {
+        $path = Join-Path $Folder $job.Name
+        if (-not (Test-Path $path)) {
+            Write-Host "Running job '$($job.Name)'..."
+            & $job.Script $path
         }
     }
     Write-Host "Please reboot to restore background services"
