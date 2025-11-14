@@ -439,6 +439,18 @@ function Invoke-BenchKit {
     if (-not (Test-Path $subfolder)) {
         Invoke-HwinfoOCCT -Folder $subfolder -HwinfoExe $HwinfoExe -OCCTExe $OCCTExe -Priority $Priority
     }
+    $subfolder = Join-Path $Folder "stab_occt_3dvar"
+    if (-not (Test-Path $subfolder)) {
+        Invoke-HwinfoOCCT -Folder $subfolder -HwinfoExe $HwinfoExe -OCCTExe $OCCTExe -Priority $Priority
+    }
+    $subfolder = Join-Path $Folder "stab_occt_3dswitch"
+    if (-not (Test-Path $subfolder)) {
+        Invoke-HwinfoOCCT -Folder $subfolder -HwinfoExe $HwinfoExe -OCCTExe $OCCTExe -Priority $Priority
+    }
+    $subfolder = Join-Path $Folder "stab_occt_vram"
+    if (-not (Test-Path $subfolder)) {
+        Invoke-HwinfoOCCT -Folder $subfolder -HwinfoExe $HwinfoExe -OCCTExe $OCCTExe -Priority $Priority
+    }
     $subfolder = Join-Path $Folder "stab_prime95"
     if (-not (Test-Path $subfolder)) {
         Invoke-HwinfoPrime95 -Folder $subfolder -HwinfoExe $HwinfoExe -Prime95Exe $Prime95Exe -Priority $Priority -Duration $Prime95Duration -Cores $Cores -Affinity ((1 -shl ($Cores * 2)) - 1)
