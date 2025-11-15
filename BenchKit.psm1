@@ -1,6 +1,6 @@
 function Get-AverageStderr {
     param(
-        [Double[]]$Numbers
+        [Double[]]$Numbers = @()
     )
     $n = $Numbers.Count
     $mean =
@@ -25,7 +25,7 @@ function Get-AverageStderr {
 
 function Get-ConfidenceInterval {
     param(
-        [Double[]]$Numbers
+        [Double[]]$Numbers = @()
     )
     $avgstderr = Get-AverageStderr -Numbers $Numbers
     if ([Double]::IsPositiveInfinity($avgstderr.StdErr)) {
@@ -36,6 +36,23 @@ function Get-ConfidenceInterval {
             [Double]($avgstderr.Average + 1.96 * $avgstderr.StdErr)
         )
     }
+}
+
+function Get-FormattedNumbers {
+    param(
+        [Parameter(Mandatory)][String]$Name,
+        [Double[]]$Numbers = @(),
+        [String]$Format = "F3"
+    )
+    $confint = Get-ConfidenceInterval -Numbers $Numbers
+    Write-Output "=== $Name ==="
+    Write-Output (($Numbers | ForEach-Object { "{0:$Format}" -f $_ }) -join ",")
+    Write-Output ("95% CI for sample mean: [{0:$Format}, {1:$Format}]" -f $confint)
+}
+
+function Get-FormattedDate {
+    Write-Output "=== Date ==="
+    Write-Output (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
 }
 
 function Stop-App {
@@ -212,9 +229,8 @@ function Find-CinebenchValues {
         $numbers = $matches[1] -split ',' | ForEach-Object { [Double]($_.Trim()) }
         $confint = Get-ConfidenceInterval -Numbers $numbers
         $outputText = @(
-            "=== $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ===",
-            "Scores: $($numbers -join ', ')",
-            ("95% Conf Int: [{0:F3}, {1:F3}]" -f $confint)
+            (Get-FormattedDate),
+            (Get-FormattedNumbers -Name "Score" -Numbers $numbers)
         )
         $outputText | Out-File -FilePath $OutputFile -Encoding UTF8
     } else {
@@ -330,30 +346,47 @@ function Invoke-Cyberpunk {
     param(
         [Parameter(Mandatory)][String]$Folder,
         [Parameter(Mandatory)][String]$CyberpunkExe,
-        [Parameter(Mandatory)][String]$Priority
+        [Parameter(Mandatory)][String]$Priority,
+        [Int32]$Runs = 5
     )
-    $log = Join-Path $Folder "summary.json"
-    if (Test-Path $log) {
-        Write-Host "Removing existing '$log'..."
-        Remove-Item $log -Force -ErrorAction Stop
-    }
     $resultsrootfolder = Join-Path $([Environment]::GetFolderPath('MyDocuments')) "CD Projekt Red\Cyberpunk 2077\benchmarkResults"
     if (Test-Path $resultsrootfolder) {
         Write-Host "Removing old benchmark results folder: $resultsrootfolder"
         Remove-Item $resultsrootfolder -Recurse -Force
     }
-    Write-Host "Starting Cyberpunk..."
-    & "$CyberpunkExe" "-benchmark"
-    Start-Sleep -Seconds 5
-    Set-ProcessPriority -Name Cyberpunk2077 -Priority $Priority
-    Write-Host "Waiting for Cyberpunk to complete..."
-    Wait-Process -Name Cyberpunk2077
-    if (Test-Path $resultsrootfolder) {
-        $resultsfolder = Get-ChildItem -Directory $resultsrootfolder | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-        Copy-Item -Path (Join-Path $resultsfolder.FullName "summary.json") -Destination $log
-    } else {
-        Write-Error "Benchmark results folder not found: $resultsrootfolder"
+    ForEach ($run in @(1..$Runs)) {
+        Write-Host "Starting Cyberpunk (run $run/$Runs)..."
+        & "$CyberpunkExe" "-benchmark"
+        Start-Sleep -Seconds 10
+        Set-ProcessPriority -Name Cyberpunk2077 -Priority $Priority
+        Write-Host "Waiting for Cyberpunk to complete..."
+        Wait-Process -Name Cyberpunk2077
     }
+    $i=0; Get-ChildItem -Path $resultsrootfolder "summary.json" -Recurse | ForEach-Object { $i++; Copy-Item $_.FullName (Join-Path $Folder "summary$i.json") }
+    $allFps =  Get-ChildItem -File -Path $resultsrootfolder -Filter "summary.json" -Recurse |
+    ForEach-Object { 
+        try { 
+            ConvertFrom-Json (Get-Content $_.FullName -Raw) 
+        } catch {
+            Write-Warning "Skipping $_"
+        }
+    } |
+    ForEach-Object { $_.Data } |
+    Where-Object { $_ } |
+    ForEach-Object {
+        [PSCustomObject]@{
+            Avg = $_.averageFps
+            Min = $_.minFps
+            Max = $_.maxFps
+        }
+    }
+    $outputText = @(
+        (Get-FormattedDate),
+        (Get-FormattedNumbers -Name "AvgFps" -Numbers ($allFps | Where-Object Avg | ForEach-Object Avg)),
+        (Get-FormattedNumbers -Name "MinFps" -Numbers ($allFps | Where-Object Min | ForEach-Object Min)),
+        (Get-FormattedNumbers -Name "MaxFps" -Numbers ($allFps | Where-Object Max | ForEach-Object Max))
+    )
+    $outputText | Out-File -FilePath (Join-Path $Folder "fps.txt") -Encoding UTF8
 }
 
 function Invoke-3DMark {
@@ -361,38 +394,33 @@ function Invoke-3DMark {
         [Parameter(Mandatory)][String]$Folder,
         [Parameter(Mandatory)][String]$Priority
     )
-    $log = Join-Path $Folder "results.txt"
-    if (Test-Path $log) {
-        Write-Host "Removing existing '$log'..."
-        Remove-Item $log -Force -ErrorAction Stop
-    }
     $resultsrootfolder = Join-Path $([Environment]::GetFolderPath('MyDocuments')) "3DMark"
     if (Test-Path $resultsrootfolder) {
         Write-Host "Removing old benchmark results folder: $resultsrootfolder"
         Remove-Item $resultsrootfolder -Recurse -Force
     }
     Write-Host "Starting 3DMark..."
-    # appid for 3dmark demo is 231350
+    # appid for 3dmark demo is 231350 (does not run without steam)
     Start-Process "steam://rungameid/231350"
     # application takes a while to initialize
-    Start-Sleep -Seconds 30
+    Start-Sleep -Seconds 45
     Set-ProcessPriority -Name 3DMark -Priority $Priority
-    Write-Host "Waiting for 3DMark to complete..."
+    Write-Host "Please run the 3DMark Steel Nomad test five times, then exit the application..."
     Wait-Process -Name 3DMark
     if (Test-Path $resultsrootfolder) {
-        $resultfile = Get-ChildItem -File $resultsrootfolder -Filter *.3dmark-result | Sort-Object LastWriteTime -Descending | Select-Object -First 1
-        if ($resultfile.BaseName -match '^3DMark-([A-Za-z0-9_]+)-([0-9]+)-') {
-            $TestName = $matches[1]
-            $Score    = $matches[2]
-            $outputText = @(
-                "=== $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ===",
-                "Benchmark: $TestName",
-                "Score: $Score"
-            )
-            $outputText | Out-File -FilePath $log -Encoding UTF8
-        } else {
-            write-Error "Result file does not match expected pattern: $resultfile"
-        }
+        $scores = Get-ChildItem -File -Path $resultsrootfolder -Filter "*.3dmark-result" -Recurse |
+            ForEach-Object {
+                if ($_.BaseName -match '^3DMark-SteelNomad-([0-9]+)-') {
+                    $matches[1]
+                } else {
+                    write-Error "Result file does not match expected pattern: $($_.BaseName)"
+                }
+            }
+        $outputText = @(
+            (Get-FormattedDate),
+            (Get-FormattedNumbers -Name "Score" -Numbers $scores)
+        )
+        $outputText | Out-File -FilePath (Join-Path $Folder "score.txt") -Encoding UTF8
     } else {
         Write-Error "Benchmark results folder not found: $resultsrootfolder"
     }
