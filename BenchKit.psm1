@@ -529,7 +529,25 @@ function Invoke-BenchKit {
                 Invoke-HwinfoIdle -Folder $path -HwinfoExe $HwinfoExe -Priority $Priority -Duration $IdleDuration
             }
         }
-
+        0..($Cores - 1) | ForEach-Object {
+            $core = $_
+            @{
+                Name = "stab_prime95_core$core"
+                Script = {
+                    param($path)
+                    $affinity = (0x3 -shl (2 * $core))
+                    Invoke-HwinfoPrime95 -Folder $path -HwinfoExe $HwinfoExe -Prime95Exe $Prime95Exe -Priority $Priority -Duration $Prime95Duration -Cores 1 -Affinity $affinity
+                }
+            }
+        }
+        @{
+            Name = "stab_prime95"
+            Script = {
+                param($path)
+                $affinity = ((1 -shl ($Cores * 2)) - 1)
+                Invoke-HwinfoPrime95 -Folder $path -HwinfoExe $HwinfoExe -Prime95Exe $Prime95Exe -Priority $Priority -Duration $Prime95Duration -Cores $Cores -Affinity $affinity
+            }
+        }
         @{
             Name = "bench_cyberpunk"
             Script = {
@@ -564,25 +582,6 @@ function Invoke-BenchKit {
                 Script = {
                     param($path)
                     Invoke-HwinfoOCCT -Folder $path -HwinfoExe $HwinfoExe -OCCTExe $OCCTExe -Priority $Priority
-                }
-            }
-        }
-        @{
-            Name = "stab_prime95"
-            Script = {
-                param($path)
-                $affinity = ((1 -shl ($Cores * 2)) - 1)
-                Invoke-HwinfoPrime95 -Folder $path -HwinfoExe $HwinfoExe -Prime95Exe $Prime95Exe -Priority $Priority -Duration $Prime95Duration -Cores $Cores -Affinity $affinity
-            }
-        }
-        0..($Cores - 1) | ForEach-Object {
-            $core = $_
-            @{
-                Name = "stab_prime95_core$core"
-                Script = {
-                    param($path)
-                    $affinity = (0x3 -shl (2 * $core))
-                    Invoke-HwinfoPrime95 -Folder $path -HwinfoExe $HwinfoExe -Prime95Exe $Prime95Exe -Priority $Priority -Duration $Prime95Duration -Cores 1 -Affinity $affinity
                 }
             }
         }
