@@ -1,6 +1,46 @@
+function Get-AverageStderr {
+    param(
+        [Double[]]$Numbers
+    )
+    $n = $Numbers.Count
+    $mean =
+        if ($n -Eq 0) {
+            [Double]::NaN
+        } else {
+            [Double](($Numbers | Measure-Object -Average).Average)
+        }
+    $stderr =
+        if ($n -Lt 2) {
+            [Double]::PositiveInfinity
+        } else {
+            $sumSqDiff = ($Numbers | ForEach-Object { ($_ - $mean) * ($_ - $mean) } | Measure-Object -Sum).Sum
+            $variance = $sumSqDiff / ($n - 1)
+            [Math]::Sqrt($variance / $n)
+        }
+    [PSCustomObject]@{
+        Average = $mean
+        StdErr  = $stderr
+    }
+}
+
+function Get-ConfidenceInterval {
+    param(
+        [Double[]]$Numbers
+    )
+    $avgstderr = Get-AverageStderr -Numbers $Numbers
+    if ([Double]::IsPositiveInfinity($avgstderr.StdErr)) {
+        @(-[Double]::PositiveInfinity, [Double]::PositiveInfinity)
+    } else {
+        @(
+            [Double]($avgstderr.Average - 1.96 * $avgstderr.StdErr),
+            [Double]($avgstderr.Average + 1.96 * $avgstderr.StdErr)
+        )
+    }
+}
+
 function Stop-App {
     param(
-        [string]$AppName
+        [String]$AppName
     )
     $proc = Get-Process -Name $AppName -ErrorAction SilentlyContinue
     if (-not $proc) { return }
@@ -170,20 +210,11 @@ function Find-CinebenchValues {
     $line = ($content | Select-String -Pattern '^Values:' | Select-Object -Last 1).Line
     if ($line -match '\{([0-9\., ]+)\}') {
         $numbers = $matches[1] -split ',' | ForEach-Object { [Double]($_.Trim()) }
-        $avg = ($numbers | Measure-Object -Average).Average
-        $n = $numbers.Count
-        if ($n -gt 1) {
-            $variance = ($numbers | ForEach-Object { [Math]::Pow($_ - $avg, 2) } | Measure-Object -Sum).Sum / ($n - 1)
-            $stddev = [Math]::Sqrt($variance)
-        } else {
-            Write-Warning "Need at least two runs to calculate sample standard deviation."
-            $stddev = 0
-        }
+        $confint = Get-ConfidenceInterval -Numbers $numbers
         $outputText = @(
             "=== $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ===",
             "Scores: $($numbers -join ', ')",
-            ("Average: {0:F3}" -f $avg),
-            ("Sample Standard Deviation: {0:F3}" -f $stddev)
+            ("95% Conf Int: [{0:F3}, {1:F3}]" -f $confint)
         )
         $outputText | Out-File -FilePath $OutputFile -Encoding UTF8
     } else {
