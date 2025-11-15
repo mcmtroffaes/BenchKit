@@ -32,7 +32,7 @@ function Stop-App {
 
 function Stop-BackgroundApps {
     param(
-        [String[]]$AppsToClose = @("OneDrive", "Steam", "Discord", "Brave", "GoXLR App", "GoXLRAudioCplApp", "RTSS"),
+        [String[]]$AppsToClose = @("OneDrive", "Discord", "Brave", "GoXLR App", "GoXLRAudioCplApp", "RTSS"),
         [String[]]$ServicesToStop = @(
             'ADPSvc','ALG','AMD Crash Defender Service','AMD External Events Utility','amd3dvcacheSvc',
             'AmdAppCompatSvc','AmdPpkgSvc','AppReadiness','AppXSvc','ApxSvc','AsusUpdateCheck',
@@ -71,15 +71,14 @@ function Set-ProcessPriority {
         [Parameter(Mandatory)][String]$Priority
     )
     Write-Host "Setting priority of $Name to $Priority..."
-    $process = Get-Process $Name -ErrorAction SilentlyContinue
-    if ($process) {
+    $processes = Get-Process $Name -ErrorAction SilentlyContinue
+    foreach ($process in $processes) {
         try {
             $process.PriorityClass = $Priority
+            Write-Host "Priority of $process set to $Priority"
         } catch {
-            Write-Warning "Failed to change priority: $($_.Exception.Message)"
+            Write-Warning "Failed to change priority on $($process): $($_.Exception.Message)"
         }
-    } else {
-        Write-Warning "$Name process not found. Skipping priority change."
     }
 }
 
@@ -89,15 +88,14 @@ function Set-ProcessAffinity {
         [Parameter(Mandatory)][Int32]$Affinity
     )
     Write-Host "Setting affinity of $Name to $Affinity..."
-    $process = Get-Process $Name -ErrorAction SilentlyContinue
-    if ($process) {
+    $processes = Get-Process $Name -ErrorAction SilentlyContinue
+    foreach ($process in $processes) {
         try {
             $process.ProcessorAffinity = $Affinity
+            Write-Host "Affinity of $process set to $Affinity"
         } catch {
-            Write-Warning "Failed to change affinity: $($_.Exception.Message)"
+            Write-Warning "Failed to change affinity on $($process): $($_.Exception.Message)"
         }
-    } else {
-        Write-Warning "$Name process not found. Skipping affinity change."
     }
 }
 
@@ -327,6 +325,48 @@ function Invoke-Cyberpunk {
     }
 }
 
+function Invoke-3DMark {
+    param(
+        [Parameter(Mandatory)][String]$Folder,
+        [Parameter(Mandatory)][String]$Priority
+    )
+    $log = Join-Path $Folder "results.txt"
+    if (Test-Path $log) {
+        Write-Host "Removing existing '$log'..."
+        Remove-Item $log -Force -ErrorAction Stop
+    }
+    $resultsrootfolder = Join-Path $([Environment]::GetFolderPath('MyDocuments')) "3DMark"
+    if (Test-Path $resultsrootfolder) {
+        Write-Host "Removing old benchmark results folder: $resultsrootfolder"
+        Remove-Item $resultsrootfolder -Recurse -Force
+    }
+    Write-Host "Starting 3DMark..."
+    # appid for 3dmark demo is 231350
+    Start-Process "steam://rungameid/231350"
+    # application takes a while to initialize
+    Start-Sleep -Seconds 30
+    Set-ProcessPriority -Name 3DMark -Priority $Priority
+    Write-Host "Waiting for 3DMark to complete..."
+    Wait-Process -Name 3DMark
+    if (Test-Path $resultsrootfolder) {
+        $resultfile = Get-ChildItem -File $resultsrootfolder -Filter *.3dmark-result | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        if ($resultfile.BaseName -match '^3DMark-([A-Za-z0-9_]+)-([0-9]+)-') {
+            $TestName = $matches[1]
+            $Score    = $matches[2]
+            $outputText = @(
+                "=== $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') ===",
+                "Benchmark: $TestName",
+                "Score: $Score"
+            )
+            $outputText | Out-File -FilePath $log -Encoding UTF8
+        } else {
+            write-Error "Result file does not match expected pattern: $resultfile"
+        }
+    } else {
+        Write-Error "Benchmark results folder not found: $resultsrootfolder"
+    }
+}
+
 function Invoke-HwinfoIdle {
     param(
         [Parameter(Mandatory)][String]$Folder,
@@ -392,6 +432,17 @@ function Invoke-HwinfoCyberpunk {
     Stop-Hwinfo
 }
 
+function Invoke-Hwinfo3DMark {
+    param(
+        [Parameter(Mandatory)][String]$Folder,
+        [Parameter(Mandatory)][String]$HwinfoExe,
+        [Parameter(Mandatory)][String]$Priority
+    )
+    Start-Hwinfo -Folder $Folder -HwinfoExe $HwinfoExe -Priority $Priority
+    Invoke-3DMark -Folder $Folder -Priority $Priority
+    Stop-Hwinfo
+}
+
 function Invoke-BenchKit {
     param(
         [Parameter(Mandatory)][String]$Folder,
@@ -439,6 +490,13 @@ function Invoke-BenchKit {
             Script = {
                 param($path)
                 Invoke-HwinfoCinebench -Folder $path -HwinfoExe $HwinfoExe -CinebenchExe $CinebenchExe -Priority $Priority -Duration $CinebenchDuration -Arg "g_CinebenchCpuXTest=true"
+            }
+        }
+        @{
+            Name = "bench_3dmark_steelnomad"
+            Script = {
+                param($path)
+                Invoke-Hwinfo3DMark -Folder $path -HwinfoExe $HwinfoExe -Priority $Priority
             }
         }
         "bench_occt_cpu","bench_occt_ram","stab_occt_cpuram","stab_occt_3dvar","stab_occt_3dswitch","stab_occt_vram" | ForEach-Object {
