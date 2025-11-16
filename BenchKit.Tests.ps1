@@ -2,46 +2,20 @@
     Import-Module .\BenchKit.psm1 -Force
 }
 
-Describe "Get-AverageStderr" {
-    $testCases = @(
-        @{ Numbers = @(1,2,3,4,5); ExpectedAverage = 3; ExpectedStdErr = 0.7071 },
-        @{ Numbers = @(5,5,5,5); ExpectedAverage = 5; ExpectedStdErr = 0 },
-        @{ Numbers = @(21,13,66,5); ExpectedAverage = 26.25; ExpectedStdErr = 13.6466 }
-    )
-    It -ForEach $testCases "Calculates correct Average and StdErr for <Numbers>" {
-        $result = Get-AverageStdErr -Numbers $_.Numbers
-        $result.Average | Should -BeGreaterOrEqual ($_.ExpectedAverage - 0.0001)
-        $result.Average | Should -BeLessOrEqual ($_.ExpectedAverage + 0.0001)
-        $result.StdErr | Should -BeGreaterOrEqual ($_.ExpectedStdErr - 0.0001)
-        $result.StdErr | Should -BeLessOrEqual ($_.ExpectedStdErr + 0.0001)
-    }
-    It "Returns Infinity for StdErr when only one number is supplied" {
-        $result = Get-AverageStdErr @(42)
-        $result.StdErr | Should -Be ([Double]::PositiveInfinity)
-        $result.Average | Should -Be 42
-    }
-
-    It -ForEach @() "Returns NaN for average and Infinity for stderr when empty array is supplied" {
-        $result = Get-AverageStdErr @()
-        [Double]::IsNaN($result.Average) | Should -BeTrue
-        $result.StdErr  | Should -Be ([Double]::PositiveInfinity)
-    }
-}
-
 Describe "Get-ConfidenceInterval" {
-    It "Calculates correct 95% confidence interval for @(21,13,66,5)" {
-        $ci = Get-ConfidenceInterval @(21,13,66,5)
-        $expectedLower = 26.25 - 1.96 * 13.6466
-        $expectedUpper = 26.25 + 1.96 * 13.6466
-        $tol = 0.001
-        ([Math]::Abs($ci[0] - $expectedLower) -le $tol) | Should -BeTrue
-        ([Math]::Abs($ci[1] - $expectedUpper) -le $tol) | Should -BeTrue
-    }
-
-    It -Foreach @(42),@() "Returns correct confidence interval for <_>" {
-        $ci = Get-ConfidenceInterval $_
-        $ci[0] | Should -Be (-[Double]::PositiveInfinity)
-        $ci[1] | Should -Be ([Double]::PositiveInfinity)
+    $testCases = @(
+        @{ Numbers = @(1,2,3,4,5); ExpectedLower = 3 - 1.96 * 0.7071; ExpectedUpper = 3 + 1.96 * 0.7071 },
+        @{ Numbers = @(5,5,5,5); ExpectedLower = 5; ExpectedUpper = 5 },
+        @{ Numbers = @(21,13,66,5); ExpectedLower = 26.25 - 1.96 * 13.6466; ExpectedUpper = 26.25 + 1.96 * 13.6466 }
+        @{ Numbers = @(42); ExpectedLower = -[Double]::PositiveInfinity; ExpectedUpper = [Double]::PositiveInfinity }
+        @{ Numbers = @(); ExpectedLower = -[Double]::PositiveInfinity; ExpectedUpper = [Double]::PositiveInfinity }
+    )
+    It -ForEach $testCases "Calculates correct 95% confidence interval for <Numbers>" {
+        $result = Get-ConfidenceInterval -Numbers $_.Numbers
+        $result[0] | Should -BeGreaterOrEqual ($_.ExpectedLower - 0.0001)
+        $result[0] | Should -BeLessOrEqual ($_.ExpectedLower + 0.0001)
+        $result[1] | Should -BeGreaterOrEqual ($_.ExpectedUpper - 0.0001)
+        $result[1] | Should -BeLessOrEqual ($_.ExpectedUpper + 0.0001)
     }
 }
 

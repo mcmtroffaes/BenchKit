@@ -1,39 +1,19 @@
-function Get-AverageStderr {
-    param(
-        [Double[]]$Numbers = @()
-    )
-    $n = $Numbers.Count
-    $mean =
-        if ($n -Eq 0) {
-            [Double]::NaN
-        } else {
-            [Double](($Numbers | Measure-Object -Average).Average)
-        }
-    $stderr =
-        if ($n -Lt 2) {
-            [Double]::PositiveInfinity
-        } else {
-            $sumSqDiff = ($Numbers | ForEach-Object { ($_ - $mean) * ($_ - $mean) } | Measure-Object -Sum).Sum
-            $variance = $sumSqDiff / ($n - 1)
-            [Math]::Sqrt($variance / $n)
-        }
-    [PSCustomObject]@{
-        Average = $mean
-        StdErr  = $stderr
-    }
-}
-
 function Get-ConfidenceInterval {
     param(
         [Double[]]$Numbers = @()
     )
-    $avgstderr = Get-AverageStderr -Numbers $Numbers
-    if ([Double]::IsPositiveInfinity($avgstderr.StdErr)) {
+    $n = $Numbers.Count
+    if ($n -Lt 2) {
         @(-[Double]::PositiveInfinity, [Double]::PositiveInfinity)
     } else {
+        $avg = [Double](($Numbers | Measure-Object -Average).Average)
+        $sumsquares = ($Numbers | ForEach-Object { ($_ - $avg) * ($_ - $avg) } | Measure-Object -Sum).Sum
+        $variance = $sumsquares / ($n - 1)
+        $stderr = [Math]::Sqrt($variance / $n)
+        $z = 1.96
         @(
-            [Double]($avgstderr.Average - 1.96 * $avgstderr.StdErr),
-            [Double]($avgstderr.Average + 1.96 * $avgstderr.StdErr)
+            [Double]($avg - $z * $stderr),
+            [Double]($avg + $z * $stderr)
         )
     }
 }
