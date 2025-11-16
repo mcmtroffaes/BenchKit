@@ -529,14 +529,12 @@ function Invoke-BenchKit {
                 Invoke-HwinfoIdle -Folder $path -HwinfoExe $HwinfoExe -Priority $Priority -Duration $IdleDuration
             }
         }
-        0..($Cores - 1) | ForEach-Object {
-            $core = $_
+        @(0..($Cores - 1)) | ForEach-Object {
             @{
-                Name = "stab_prime95_core$core"
+                Name = "stab_prime95_core$($_)"
                 Script = {
                     param($path)
-                    $affinity = (0x3 -shl (2 * $core))
-                    Invoke-HwinfoPrime95 -Folder $path -HwinfoExe $HwinfoExe -Prime95Exe $Prime95Exe -Priority $Priority -Duration $Prime95Duration -Cores 1 -Affinity $affinity
+                    Invoke-HwinfoPrime95 -Folder $path -HwinfoExe $HwinfoExe -Prime95Exe $Prime95Exe -Priority $Priority -Duration $Prime95Duration -Cores 1 -Affinity (0x3 -shl (2 * $_))
                 }
             }
         }
@@ -544,8 +542,7 @@ function Invoke-BenchKit {
             Name = "stab_prime95"
             Script = {
                 param($path)
-                $affinity = ((1 -shl ($Cores * 2)) - 1)
-                Invoke-HwinfoPrime95 -Folder $path -HwinfoExe $HwinfoExe -Prime95Exe $Prime95Exe -Priority $Priority -Duration $Prime95Duration -Cores $Cores -Affinity $affinity
+                Invoke-HwinfoPrime95 -Folder $path -HwinfoExe $HwinfoExe -Prime95Exe $Prime95Exe -Priority $Priority -Duration $Prime95Duration -Cores $Cores -Affinity ((1 -shl ($Cores * 2)) - 1)
             }
         }
         @{
