@@ -4,6 +4,7 @@
 
 Describe "Get-ConfidenceInterval" {
     $testCases = @(
+        @{ Numbers = @(-1,1); ExpectedLower = -1.96; ExpectedUpper = 1.96 },
         @{ Numbers = @(1,2,3,4,5); ExpectedLower = 3 - 1.96 * 0.7071; ExpectedUpper = 3 + 1.96 * 0.7071 },
         @{ Numbers = @(5,5,5,5); ExpectedLower = 5; ExpectedUpper = 5 },
         @{ Numbers = @(21,13,66,5); ExpectedLower = 26.25 - 1.96 * 13.6466; ExpectedUpper = 26.25 + 1.96 * 13.6466 }
