@@ -27,7 +27,7 @@ function Get-FormattedNumbers {
     $confint = Get-ConfidenceInterval -Numbers $Numbers
     Write-Output "=== $Name ==="
     Write-Output (($Numbers | ForEach-Object { "{0:$Format}" -f $_ }) -join ",")
-    Write-Output ("95% CI for sample mean: [{0:$Format}, {1:$Format}]" -f $confint)
+    Write-Output ("95% CI for mean: [{0:$Format}, {1:$Format}]" -f $confint)
 }
 
 function Get-FormattedDate {

@@ -22,10 +22,10 @@ Describe "Get-ConfidenceInterval" {
 
 Describe "Get-FormattedNumbers" {
     It -ForEach @(
-        @{ Name = "Sample1"; Numbers = @(21,13,66,5); Expected = @("=== Sample1 ===", "21.000,13.000,66.000,5.000", "95% CI for sample mean: [-0.497, 52.997]") },
-        @{ Name = "Sample2"; Numbers = @(1,2,3,4,5); Expected = @("=== Sample2 ===", "1.000,2.000,3.000,4.000,5.000", "95% CI for sample mean: [1.614, 4.386]") },
-        @{ Name = "Single";   Numbers = @(42); Expected = @("=== Single ===", "42.000", "95% CI for sample mean: [-∞, ∞]") },
-        @{ Name = "Empty";    Numbers = @(); Expected = @("=== Empty ===", "", "95% CI for sample mean: [-∞, ∞]") }
+        @{ Name = "Sample1"; Numbers = @(21,13,66,5); Expected = @("=== Sample1 ===", "21.000,13.000,66.000,5.000", "95% CI for mean: [-0.497, 52.997]") },
+        @{ Name = "Sample2"; Numbers = @(1,2,3,4,5); Expected = @("=== Sample2 ===", "1.000,2.000,3.000,4.000,5.000", "95% CI for mean: [1.614, 4.386]") },
+        @{ Name = "Single";   Numbers = @(42); Expected = @("=== Single ===", "42.000", "95% CI for mean: [-∞, ∞]") },
+        @{ Name = "Empty";    Numbers = @(); Expected = @("=== Empty ===", "", "95% CI for mean: [-∞, ∞]") }
     ) "Formats numbers and CI correctly for <Name>" {
         $output = Get-FormattedNumbers -Name $_.Name -Numbers $_.Numbers
         $output | Should -Be $_.Expected
