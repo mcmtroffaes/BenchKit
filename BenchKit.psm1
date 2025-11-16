@@ -530,12 +530,13 @@ function Invoke-BenchKit {
             }
         }
         @(0..($Cores - 1)) | ForEach-Object {
+            $core = $_
             @{
-                Name = "stab_prime95_core$($_)"
+                Name = "stab_prime95_core$core"
                 Script = {
                     param($path)
-                    Invoke-HwinfoPrime95 -Folder $path -HwinfoExe $HwinfoExe -Prime95Exe $Prime95Exe -Priority $Priority -Duration $Prime95Duration -Cores 1 -Affinity (0x3 -shl (2 * $_))
-                }
+                    Invoke-HwinfoPrime95 -Folder $path -HwinfoExe $HwinfoExe -Prime95Exe $Prime95Exe -Priority $Priority -Duration $Prime95Duration -Cores 1 -Affinity (0x3 -shl (2 * $core))
+                }.GetNewClosure()  # ensure $core is bound at script creation time
             }
         }
         @{
