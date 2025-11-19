@@ -490,6 +490,8 @@ function Invoke-BenchKit {
         [Parameter(Mandatory)][String]$OCCTExe,
         [Parameter(Mandatory)][String]$Prime95Exe,
         [Parameter(Mandatory)][String]$CyberpunkExe,
+        [Switch]$Cpu,
+        [Switch]$Gpu,
         [String]$Priority = "AboveNormal",
         [Int32]$IdleDuration = 1200,
         [Int32]$CinebenchDuration = 1200,
@@ -501,7 +503,7 @@ function Invoke-BenchKit {
         New-Item -Path $Folder -ItemType "directory" -Force
     }
     Stop-BackgroundApps
-    $jobs = @(
+    $cpujobs = @(
         @{
             Name = "idle"
             Script = {
@@ -527,13 +529,6 @@ function Invoke-BenchKit {
             }
         }
         @{
-            Name = "bench_cyberpunk"
-            Script = {
-                param($path)
-                Invoke-HwinfoCyberpunk -Folder $path -HwinfoExe $HwinfoExe -CyberpunkExe $CyberpunkExe -Priority $Priority
-            }
-        }
-        @{
             Name = "bench_cine_cpu1"
             Script = {
                 param($path)
@@ -547,14 +542,7 @@ function Invoke-BenchKit {
                 Invoke-HwinfoCinebench -Folder $path -HwinfoExe $HwinfoExe -CinebenchExe $CinebenchExe -Priority $Priority -Duration $CinebenchDuration -Arg "g_CinebenchCpuXTest=true"
             }
         }
-        @{
-            Name = "bench_3dmark_steelnomad"
-            Script = {
-                param($path)
-                Invoke-Hwinfo3DMark -Folder $path -HwinfoExe $HwinfoExe -Priority $Priority
-            }
-        }
-        "bench_occt_cpu","bench_occt_ram","stab_occt_cpuram","stab_occt_3dvar","stab_occt_3dswitch","stab_occt_vram" | ForEach-Object {
+        "bench_occt_cpu","bench_occt_ram","stab_occt_cpuram" | ForEach-Object {
             @{
                 Name = $_
                 Script = {
@@ -564,6 +552,40 @@ function Invoke-BenchKit {
             }
         }
     )
+    $gpujobs = @(
+        @{
+            Name = "bench_cyberpunk"
+            Script = {
+                param($path)
+                Invoke-HwinfoCyberpunk -Folder $path -HwinfoExe $HwinfoExe -CyberpunkExe $CyberpunkExe -Priority $Priority
+            }
+        }
+        @{
+            Name = "bench_3dmark_steelnomad"
+            Script = {
+                param($path)
+                Invoke-Hwinfo3DMark -Folder $path -HwinfoExe $HwinfoExe -Priority $Priority
+            }
+        }
+        "stab_occt_3dvar","stab_occt_3dswitch","stab_occt_vram" | ForEach-Object {
+            @{
+                Name = $_
+                Script = {
+                    param($path)
+                    Invoke-HwinfoOCCT -Folder $path -HwinfoExe $HwinfoExe -OCCTExe $OCCTExe -Priority $Priority
+                }
+            }
+        }
+    )
+    if ($Cpu -and -not $Gpu) {
+        $jobs = $cpujobs
+    }
+    elseif ($Gpu -and -not $Cpu) {
+        $jobs = $gpujobs
+    }
+    else {
+        $jobs = $cpujobs + $gpujobs
+    }
     foreach ($job in $jobs) {
         $path = Join-Path $Folder $job.Name
         if (-not (Test-Path $path)) {
