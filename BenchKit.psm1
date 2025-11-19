@@ -69,7 +69,7 @@ function Stop-App {
 
 function Stop-BackgroundApps {
     param(
-        [String[]]$AppsToClose = @("OneDrive", "Discord", "Brave", "GoXLR App", "GoXLRAudioCplApp", "RTSS"),
+        [String[]]$AppsToClose = @("OneDrive", "Discord", "Brave", "GoXLR App", "GoXLRAudioCplApp"),
         [String[]]$ServicesToStop = @(
             'ADPSvc','ALG','AMD Crash Defender Service','AMD External Events Utility','amd3dvcacheSvc',
             'AmdAppCompatSvc','AmdPpkgSvc','AppReadiness','AppXSvc','ApxSvc','AsusUpdateCheck',
