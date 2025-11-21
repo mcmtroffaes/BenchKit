@@ -107,14 +107,18 @@ function Set-ProcessPriority {
         [Parameter(Mandatory)][String]$Name,
         [Parameter(Mandatory)][String]$Priority
     )
-    Write-Host "Setting priority of $Name to $Priority..."
+    Write-Debug "Checking priority of $Name processes..."
     $processes = Get-Process $Name -ErrorAction SilentlyContinue
     foreach ($process in $processes) {
         try {
-            $process.PriorityClass = $Priority
-            Write-Host "Priority of $process set to $Priority"
+            if ($process.PriorityClass -ne $Priority) {
+                $process.PriorityClass = $Priority
+                Write-Host "Priority of $($process.Name) (PID $($process.Id)) set to $Priority"
+            } else {
+                Write-Debug "Priority of $($process.Name) (PID $($process.Id)) is already $Priority, skipping"
+            }
         } catch {
-            Write-Warning "Failed to change priority on $($process): $($_.Exception.Message)"
+            Write-Warning "Failed to change priority on $($process.Name) (PID $($process.Id)): $($_.Exception.Message)"
         }
     }
 }
@@ -411,10 +415,69 @@ function Invoke-BlenderBenchmark {
         [Parameter(Mandatory)][String]$Folder,
         [Parameter(Mandatory)][String]$BlenderBenchmarkExe,
         [Parameter(Mandatory)][String]$DeviceType,
-        [Parameter(Mandatory)][String]$Priority
+        [Parameter(Mandatory)][String]$Priority,
+        [Int32]$Runs = 5
     )
-    Write-Host "Starting blender benchmark..."
-    & $BlenderBenchmarkExe benchmark --blender-version 4.5.0 --device-type $DeviceType --json monster junkshop classroom > (Join-Path $Folder "score.txt")
+    $monitor = Start-Job -ScriptBlock {
+        while ($true) {
+            Start-Sleep -Seconds 1
+            # can't use Set-ProcessPriority...
+            Get-Process "blender" -ErrorAction SilentlyContinue | ForEach-Object { $_.PriorityClass = $using:Priority }
+        }
+    }
+    try {
+        ForEach ($run in @(1..$Runs)) {
+            Write-Host "Starting blender benchmark (run $run/$Runs)..."
+            $resultsjson = Join-Path $Folder ("results$run.json")
+            & $BlenderBenchmarkExe benchmark --blender-version 4.5.0 --device-type $DeviceType --json monster junkshop classroom |
+                Out-File -FilePath $resultsjson -Encoding UTF8
+            Receive-Job $monitor | ForEach-Object { Write-Host $_ }  # print monitor messages if any
+        }
+    } finally {
+        Stop-Job $monitor
+        Remove-Job $monitor
+    }
+    $blenderversion = (Get-Content -Raw -Path (Join-Path $Folder "results1.json") | ConvertFrom-Json)[0].blender_version.version
+    $scoresdata = Get-ChildItem -File -Path $Folder -Filter "results*.json" |
+        ForEach-Object {
+            try {
+                ConvertFrom-Json (Get-Content $_.FullName -Raw)
+            } catch {
+                Write-Warning "Skipping $_"
+            }
+        } |
+        Where-Object { $_ }
+    $scoresperscene = $scoresdata |
+        ForEach-Object { $_ } |
+        ForEach-Object {
+            $_ | ForEach-Object {
+                [PSCustomObject]@{
+                    Scene = $_.scene.label
+                    SPM   = $_.stats.samples_per_minute
+                }
+            }
+        } |
+        Group-Object -Property Scene | ForEach-Object {
+            [PSCustomObject]@{
+                Scene  = $_.Name
+                Scores = ($_.Group | Select-Object -ExpandProperty SPM)
+            }
+        }
+    $scorestotal = $scoresdata |
+        ForEach-Object {
+            ($_ | ForEach-Object { $_.stats.samples_per_minute } | Measure-Object -Sum).Sum
+        }
+    # output
+    $output = @()
+    $output += (Get-FormattedDate)
+    $output += "=== Blender version ==="
+    $output += "$blenderversion"
+    foreach ($row in $scoresperscene) {
+        $output += (Get-FormattedNumbers -Name "Scene $($row.Scene)" -Numbers $row.Scores)
+    }
+    $output += (Get-FormattedNumbers -Name "Total" -Numbers $scorestotal)
+    $scorePath = Join-Path $Folder "score.txt"
+    $output | Out-File -FilePath $scorePath -Encoding UTF8
 }
 
 function Invoke-HwinfoIdle {
