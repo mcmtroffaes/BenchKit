@@ -385,13 +385,13 @@ function Invoke-3DMark {
     # application takes a while to initialize
     Start-Sleep -Seconds 45
     Set-ProcessPriority -Name 3DMark -Priority $Priority
-    Write-Host "Please run the 3DMark Steel Nomad test five times, then exit the application..."
+    Write-Host "Please run the appropriate 3DMark test five times, then exit the application..."
     Wait-Process -Name 3DMark
     if (Test-Path $resultsrootfolder) {
         $scores = Get-ChildItem -File -Path $resultsrootfolder -Filter "*.3dmark-result" -Recurse |
             ForEach-Object {
-                if ($_.BaseName -match '^3DMark-SteelNomad-([0-9]+)-') {
-                    $matches[1]
+                if ($_.BaseName -match '^3DMark-([A-Za-z]+)-([0-9]+)-') {
+                    $matches[2]
                 } else {
                     write-Error "Result file does not match expected pattern: $($_.BaseName)"
                 }
@@ -560,11 +560,13 @@ function Invoke-BenchKit {
                 Invoke-HwinfoCyberpunk -Folder $path -HwinfoExe $HwinfoExe -CyberpunkExe $CyberpunkExe -Priority $Priority
             }
         }
-        @{
-            Name = "bench_3dmark_steelnomad"
-            Script = {
-                param($path)
-                Invoke-Hwinfo3DMark -Folder $path -HwinfoExe $HwinfoExe -Priority $Priority
+        "bench_3dmark_steelnomad","bench_3dmark_timespy" | ForEach-Object {
+            @{
+                Name = $_
+                Script = {
+                    param($path)
+                    Invoke-Hwinfo3DMark -Folder $path -HwinfoExe $HwinfoExe -Priority $Priority
+                }
             }
         }
         "stab_occt_3dvar","stab_occt_3dswitch","stab_occt_vram" | ForEach-Object {
