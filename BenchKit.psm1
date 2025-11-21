@@ -406,6 +406,17 @@ function Invoke-3DMark {
     }
 }
 
+function Invoke-BlenderBenchmark {
+    param(
+        [Parameter(Mandatory)][String]$Folder,
+        [Parameter(Mandatory)][String]$BlenderBenchmarkExe,
+        [Parameter(Mandatory)][String]$DeviceType,
+        [Parameter(Mandatory)][String]$Priority
+    )
+    Write-Host "Starting blender benchmark..."
+    & $BlenderBenchmarkExe benchmark --blender-version 4.5.0 --device-type $DeviceType --json monster junkshop classroom > (Join-Path $Folder "score.txt")
+}
+
 function Invoke-HwinfoIdle {
     param(
         [Parameter(Mandatory)][String]$Folder,
@@ -482,6 +493,19 @@ function Invoke-Hwinfo3DMark {
     Stop-Hwinfo
 }
 
+function Invoke-HwinfoBlenderBenchmark {
+    param(
+        [Parameter(Mandatory)][String]$Folder,
+        [Parameter(Mandatory)][String]$HwinfoExe,
+        [Parameter(Mandatory)][String]$BlenderBenchmarkExe,
+        [Parameter(Mandatory)][String]$DeviceType,
+        [Parameter(Mandatory)][String]$Priority
+    )
+    Start-Hwinfo -Folder $Folder -HwinfoExe $HwinfoExe -Priority $Priority
+    Invoke-BlenderBenchmark -Folder $Folder -BlenderBenchmarkExe $BlenderBenchmarkExe -DeviceType $DeviceType -Priority $Priority
+    Stop-Hwinfo
+}
+
 function Invoke-BenchKit {
     param(
         [Parameter(Mandatory)][String]$Folder,
@@ -490,6 +514,7 @@ function Invoke-BenchKit {
         [Parameter(Mandatory)][String]$OCCTExe,
         [Parameter(Mandatory)][String]$Prime95Exe,
         [Parameter(Mandatory)][String]$CyberpunkExe,
+        [Parameter(Mandatory)][String]$BlenderBenchmarkExe,
         [Switch]$Cpu,
         [Switch]$Gpu,
         [String]$Priority = "AboveNormal",
@@ -529,6 +554,13 @@ function Invoke-BenchKit {
             }
         }
         @{
+            Name = "bench_blender_cpu"
+            Script = {
+                param($path)
+                Invoke-HwinfoBlenderBenchmark -Folder $path -HwinfoExe $HwinfoExe -BlenderBenchmarkExe $BlenderBenchmarkExe -DeviceType "CPU" -Priority $Priority
+            }
+        }
+        @{
             Name = "bench_cine_cpu1"
             Script = {
                 param($path)
@@ -553,6 +585,13 @@ function Invoke-BenchKit {
         }
     )
     $gpujobs = @(
+        @{
+            Name = "bench_blender_optix"
+            Script = {
+                param($path)
+                Invoke-HwinfoBlenderBenchmark -Folder $path -HwinfoExe $HwinfoExe -BlenderBenchmarkExe $BlenderBenchmarkExe -DeviceType "OPTIX" -Priority $Priority
+            }
+        }
         @{
             Name = "bench_cyberpunk"
             Script = {
