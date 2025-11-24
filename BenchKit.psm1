@@ -262,9 +262,10 @@ function Invoke-Cinebench {
 
 function Invoke-OCCT {
     param(
-        [Parameter(Mandatory)][String]$OCCTExe,
         [Parameter(Mandatory)][String]$Priority
     )
+    $OCCTExe = Join-Path (Get-SteamPath) "steamapps\common\OCCT\OCCT.exe"
+    if (-Not (Test-Path $OCCTExe)) { throw "$OCCTExe not found" }
     Write-Host "Starting OCCT..."
     & $OCCTExe
     Start-Sleep -Seconds 15
@@ -557,111 +558,11 @@ function Invoke-BlenderBenchmark {
     $output | Out-File -FilePath $scorePath -Encoding UTF8
 }
 
-function Invoke-HwinfoIdle {
-    param(
-        [Parameter(Mandatory)][String]$Folder,
-        [Parameter(Mandatory)][String]$HwinfoExe,
-        [Parameter(Mandatory)][String]$Priority,
-        [Parameter(Mandatory)][String]$Duration
-    )
-    Start-Hwinfo -Folder $Folder -HwinfoExe $HwinfoExe -Priority $Priority
-    Invoke-Wait -Activity "Idle" -Duration $Duration
-    Stop-Hwinfo
-}
-
-function Invoke-HwinfoCinebench {
-    param(
-        [Parameter(Mandatory)][String]$Folder,
-        [Parameter(Mandatory)][String]$HwinfoExe,
-        [Parameter(Mandatory)][String]$CinebenchExe,
-        [Parameter(Mandatory)][String]$Priority,
-        [Parameter(Mandatory)][String]$Duration,
-        [Parameter(Mandatory)][String]$Arg
-    )
-    Start-Hwinfo -Folder $Folder -HwinfoExe $HwinfoExe -Priority $Priority
-    Invoke-Cinebench -Folder $Folder -CinebenchExe $CinebenchExe -Priority $Priority -Duration $Duration -Arg $Arg
-    Stop-Hwinfo
-}
-
-function Invoke-HwinfoOCCT {
-    param(
-        [Parameter(Mandatory)][String]$Folder,
-        [Parameter(Mandatory)][String]$HwinfoExe,
-        [Parameter(Mandatory)][String]$OCCTExe,
-        [Parameter(Mandatory)][String]$Priority
-    )
-    Start-Hwinfo -Folder $Folder -HwinfoExe $HwinfoExe -Priority $Priority
-    Invoke-OCCT -OCCTExe $OCCTExe -Priority $Priority
-    Stop-Hwinfo
-}
-
-function Invoke-HwinfoPrime95 {
-    param(
-        [Parameter(Mandatory)][String]$Folder,
-        [Parameter(Mandatory)][String]$HwinfoExe,
-        [Parameter(Mandatory)][String]$Prime95Exe,
-        [Parameter(Mandatory)][String]$Priority,
-        [Parameter(Mandatory)][Int32]$Duration,
-        [Parameter(Mandatory)][Int32]$Cores,
-        [Parameter(Mandatory)][Int32]$Affinity
-    )
-    Start-Hwinfo -Folder $Folder -HwinfoExe $HwinfoExe -Priority $Priority
-    Invoke-Prime95 -Folder $Folder -Prime95Exe $Prime95Exe -Priority $Priority -Duration $Duration -Cores $Cores -Affinity $Affinity
-    Stop-Hwinfo
-}
-
-function Invoke-HwinfoCyberpunk {
-    param(
-        [Parameter(Mandatory)][String]$Folder,
-        [Parameter(Mandatory)][String]$HwinfoExe,
-        [Parameter(Mandatory)][String]$Priority
-    )
-    Start-Hwinfo -Folder $Folder -HwinfoExe $HwinfoExe -Priority $Priority
-    Invoke-Cyberpunk -Folder $Folder -Priority $Priority
-    Stop-Hwinfo
-}
-
-function Invoke-HwinfoGTAVEnhanced {
-    param(
-        [Parameter(Mandatory)][String]$Folder,
-        [Parameter(Mandatory)][String]$HwinfoExe,
-        [Parameter(Mandatory)][String]$Priority
-    )
-    Start-Hwinfo -Folder $Folder -HwinfoExe $HwinfoExe -Priority $Priority
-    Invoke-GTAVEnhanced -Folder $Folder -Priority $Priority
-    Stop-Hwinfo
-}
-
-function Invoke-Hwinfo3DMark {
-    param(
-        [Parameter(Mandatory)][String]$Folder,
-        [Parameter(Mandatory)][String]$HwinfoExe,
-        [Parameter(Mandatory)][String]$Priority
-    )
-    Start-Hwinfo -Folder $Folder -HwinfoExe $HwinfoExe -Priority $Priority
-    Invoke-3DMark -Folder $Folder -Priority $Priority
-    Stop-Hwinfo
-}
-
-function Invoke-HwinfoBlenderBenchmark {
-    param(
-        [Parameter(Mandatory)][String]$Folder,
-        [Parameter(Mandatory)][String]$HwinfoExe,
-        [Parameter(Mandatory)][String]$BlenderBenchmarkExe,
-        [Parameter(Mandatory)][String]$DeviceType,
-        [Parameter(Mandatory)][String]$Priority
-    )
-    Start-Hwinfo -Folder $Folder -HwinfoExe $HwinfoExe -Priority $Priority
-    Invoke-BlenderBenchmark -Folder $Folder -BlenderBenchmarkExe $BlenderBenchmarkExe -DeviceType $DeviceType -Priority $Priority
-    Stop-Hwinfo
-}
-
 function Invoke-BenchKit {
     param(
         [Parameter(Mandatory)][String]$Folder,
         [Parameter(Mandatory)][String]$HwinfoExe,
         [Parameter(Mandatory)][String]$CinebenchExe,
-        [Parameter(Mandatory)][String]$OCCTExe,
         [Parameter(Mandatory)][String]$Prime95Exe,
         [Parameter(Mandatory)][String]$BlenderBenchmarkExe,
         [Switch]$Cpu,
@@ -682,7 +583,7 @@ function Invoke-BenchKit {
             Name = "idle"
             Script = {
                 param($path)
-                Invoke-HwinfoIdle -Folder $path -HwinfoExe $HwinfoExe -Priority $Priority -Duration $IdleDuration
+                Invoke-Wait -Activity "Idle" -Duration $IdleDuration
             }
         }
         @(0..($Cores - 1)) | ForEach-Object {
@@ -691,7 +592,7 @@ function Invoke-BenchKit {
                 Name = "stab_prime95_core$core"
                 Script = {
                     param($path)
-                    Invoke-HwinfoPrime95 -Folder $path -HwinfoExe $HwinfoExe -Prime95Exe $Prime95Exe -Priority $Priority -Duration $Prime95Duration -Cores 1 -Affinity (0x3 -shl (2 * $core))
+                    Invoke-Prime95 -Folder $path -Prime95Exe $Prime95Exe -Priority $Priority -Duration $Prime95Duration -Cores 1 -Affinity (0x3 -shl (2 * $core))
                 }.GetNewClosure()  # ensure $core is bound at script creation time
             }
         }
@@ -699,28 +600,28 @@ function Invoke-BenchKit {
             Name = "stab_prime95"
             Script = {
                 param($path)
-                Invoke-HwinfoPrime95 -Folder $path -HwinfoExe $HwinfoExe -Prime95Exe $Prime95Exe -Priority $Priority -Duration $Prime95Duration -Cores $Cores -Affinity ((1 -shl ($Cores * 2)) - 1)
+                Invoke-Prime95 -Folder $path -Prime95Exe $Prime95Exe -Priority $Priority -Duration $Prime95Duration -Cores $Cores -Affinity ((1 -shl ($Cores * 2)) - 1)
             }
         }
         @{
             Name = "bench_blender_cpu"
             Script = {
                 param($path)
-                Invoke-HwinfoBlenderBenchmark -Folder $path -HwinfoExe $HwinfoExe -BlenderBenchmarkExe $BlenderBenchmarkExe -DeviceType "CPU" -Priority $Priority
+                Invoke-BlenderBenchmark -Folder $path -BlenderBenchmarkExe $BlenderBenchmarkExe -DeviceType "CPU" -Priority $Priority
             }
         }
         @{
             Name = "bench_cine_cpu1"
             Script = {
                 param($path)
-                Invoke-HwinfoCinebench -Folder $path -HwinfoExe $HwinfoExe -CinebenchExe $CinebenchExe -Priority $Priority -Duration $CinebenchDuration -Arg "g_CinebenchCpu1Test=true"
+                Invoke-Cinebench -Folder $path -CinebenchExe $CinebenchExe -Priority $Priority -Duration $CinebenchDuration -Arg "g_CinebenchCpu1Test=true"
             }
         }
         @{
             Name = "bench_cine_cpux"
             Script = {
                 param($path)
-                Invoke-HwinfoCinebench -Folder $path -HwinfoExe $HwinfoExe -CinebenchExe $CinebenchExe -Priority $Priority -Duration $CinebenchDuration -Arg "g_CinebenchCpuXTest=true"
+                Invoke-Cinebench -Folder $path -CinebenchExe $CinebenchExe -Priority $Priority -Duration $CinebenchDuration -Arg "g_CinebenchCpuXTest=true"
             }
         }
         "bench_occt_cpu","bench_occt_ram","stab_occt_cpuram" | ForEach-Object {
@@ -728,7 +629,7 @@ function Invoke-BenchKit {
                 Name = $_
                 Script = {
                     param($path)
-                    Invoke-HwinfoOCCT -Folder $path -HwinfoExe $HwinfoExe -OCCTExe $OCCTExe -Priority $Priority
+                    Invoke-OCCT -Priority $Priority
                 }
             }
         }
@@ -738,21 +639,21 @@ function Invoke-BenchKit {
             Name = "bench_blender_optix"
             Script = {
                 param($path)
-                Invoke-HwinfoBlenderBenchmark -Folder $path -HwinfoExe $HwinfoExe -BlenderBenchmarkExe $BlenderBenchmarkExe -DeviceType "OPTIX" -Priority $Priority
+                Invoke-BlenderBenchmark -Folder $path -BlenderBenchmarkExe $BlenderBenchmarkExe -DeviceType "OPTIX" -Priority $Priority
             }
         }
         @{
             Name = "bench_cyberpunk"
             Script = {
                 param($path)
-                Invoke-HwinfoCyberpunk -Folder $path -HwinfoExe $HwinfoExe -Priority $Priority
+                Invoke-Cyberpunk -Folder $path -Priority $Priority
             }
         }
         @{
             Name = "bench_gtav_enhanced"
             Script = {
                 param($path)
-                Invoke-HwinfoGTAVEnhanced -Folder $path -HwinfoExe $HwinfoExe -Priority $Priority
+                Invoke-GTAVEnhanced -Folder $path -Priority $Priority
             }
         }
         "bench_3dmark_steelnomad","bench_3dmark_timespy" | ForEach-Object {
@@ -760,7 +661,7 @@ function Invoke-BenchKit {
                 Name = $_
                 Script = {
                     param($path)
-                    Invoke-Hwinfo3DMark -Folder $path -HwinfoExe $HwinfoExe -Priority $Priority
+                    Invoke-3DMark -Folder $path -Priority $Priority
                 }
             }
         }
@@ -769,7 +670,7 @@ function Invoke-BenchKit {
                 Name = $_
                 Script = {
                     param($path)
-                    Invoke-HwinfoOCCT -Folder $path -HwinfoExe $HwinfoExe -OCCTExe $OCCTExe -Priority $Priority
+                    Invoke-OCCT -Priority $Priority
                 }
             }
         }
@@ -785,9 +686,11 @@ function Invoke-BenchKit {
     }
     foreach ($job in $jobs) {
         $path = Join-Path $Folder $job.Name
-        if (-not (Test-Path $path)) {
+        if (-Not (Test-Path (Join-Path $path "hwinfo.csv"))) {
             Write-Host "Running job '$($job.Name)'..."
+            Start-Hwinfo -Folder $path -HwinfoExe $HwinfoExe -Priority $Priority
             & $job.Script $path
+            Stop-Hwinfo
         }
     }
     Write-Host "Please reboot to restore background services"
