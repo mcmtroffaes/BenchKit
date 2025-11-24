@@ -140,6 +140,14 @@ function Set-ProcessAffinity {
     }
 }
 
+Function Get-SteamRegistryRoot {
+    "HKCU:\Software\Valve\Steam"
+}
+
+Function Get-SteamPath {
+    "$((Get-ItemProperty $(Get-SteamRegistryRoot) -ea Stop).SteamPath)".Replace("/", "\")
+}
+
 function Start-Hwinfo {
     param(
         [Parameter(Mandatory)][String]$Folder,
@@ -329,10 +337,11 @@ function Invoke-Prime95 {
 function Invoke-Cyberpunk {
     param(
         [Parameter(Mandatory)][String]$Folder,
-        [Parameter(Mandatory)][String]$CyberpunkExe,
         [Parameter(Mandatory)][String]$Priority,
         [Int32]$Runs = 5
     )
+    $CyberpunkExe = Join-Path (Get-SteamPath) "steamapps\common\Cyberpunk 2077\bin\x64\Cyberpunk2077.exe"
+    if (-Not (Test-Path $CyberpunkExe)) { throw "$CyberpunkExe not found" }
     $resultsrootfolder = Join-Path $([Environment]::GetFolderPath('MyDocuments')) "CD Projekt Red\Cyberpunk 2077\benchmarkResults"
     if (Test-Path $resultsrootfolder) {
         Write-Host "Removing old benchmark results folder: $resultsrootfolder"
@@ -341,10 +350,11 @@ function Invoke-Cyberpunk {
     ForEach ($run in @(1..$Runs)) {
         Write-Host "Starting Cyberpunk (run $run/$Runs)..."
         & "$CyberpunkExe" "-benchmark"
-        Start-Sleep -Seconds 10
+        Start-Sleep -Seconds 10  # application takes a short while to initialize
         Set-ProcessPriority -Name Cyberpunk2077 -Priority $Priority
         Write-Host "Waiting for Cyberpunk to complete..."
         Wait-Process -Name Cyberpunk2077
+        Start-Sleep -Seconds 5  # ensure application is fully closed
     }
     $i=0; Get-ChildItem -Path $resultsrootfolder "summary.json" -Recurse | ForEach-Object { $i++; Copy-Item $_.FullName (Join-Path $Folder "summary$i.json") }
     $allFps =  Get-ChildItem -File -Path $resultsrootfolder -Filter "summary.json" -Recurse |
@@ -373,6 +383,75 @@ function Invoke-Cyberpunk {
     $outputText | Out-File -FilePath (Join-Path $Folder "fps.txt") -Encoding UTF8
 }
 
+function Invoke-GTAVEnhanced {
+    param(
+        [Parameter(Mandatory)][String]$Folder,
+        [Parameter(Mandatory)][String]$Priority,
+        [Int32]$Runs = 5
+    )
+    $docsfolder = Join-Path $([Environment]::GetFolderPath('MyDocuments')) "Rockstar Games\GTAV Enhanced"
+    if (-Not (Test-Path $docsfolder)) { throw "$docsfolder not found" }
+    $resultsrootfolder = Join-Path $docsfolder "Benchmarks"
+    if (Test-Path $resultsrootfolder) {
+        Write-Host "Removing old benchmark results folder: $resultsrootfolder"
+        Remove-Item $resultsrootfolder -Recurse -Force
+    }
+    $exefolder = Join-Path (Get-SteamPath) "steamapps\common\Grand Theft Auto V Enhanced"
+    if (-Not (Test-Path $exefolder)) { throw "$exefolder not found" }
+    $commandlinetxt = Join-Path $exefolder "commandline.txt"
+    Set-Content -Path $commandlinetxt -Value "-benchmark -nobattleye -scOfflineOnly"
+    ForEach ($run in @(1..$Runs)) {
+        Write-Host "Starting GTA V Enhanced (run $run/$Runs)..."
+        Start-Process "steam://rungameid/3240220"
+        Start-Sleep -Seconds 60  # application takes a while to initialize
+        Set-ProcessPriority -Name GTA5_Enhanced -Priority $Priority
+        Wait-Process -Name GTA5_Enhanced
+        Start-Sleep -Seconds 15  # ensure steam knows game is closed
+    }
+    Remove-Item $commandlinetxt -Force
+    $i=0; Get-ChildItem -Path $resultsrootfolder  -Filter "Benchmark-*.txt" -Recurse | ForEach-Object { $i++; Copy-Item $_.FullName (Join-Path $Folder "benchmark$i.txt") }
+    $scores = Get-ChildItem -File -Path $resultsrootfolder -Filter "Benchmark-*.txt" -Recurse |
+        ForEach-Object {
+            $lines = Get-Content $_.FullName
+            if ($lines[0] -notmatch '^Frames Per Second') {
+                throw "Invalid FPS header in file: $($_.Name)"
+            }
+            1..5 | ForEach-Object {
+                $line = $lines[$_]
+                if ($line -notmatch '^Pass\s+(\d+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)') {
+                    throw "Invalid FPS pass format in file $($_.Name) on line $($_ + 1): $line"
+                }
+                [PSCustomObject]@{
+                    Pass   = [int]$Matches[1]
+                    MinFPS = [double]$Matches[2]
+                    MaxFPS = [double]$Matches[3]
+                    AvgFPS = [double]$Matches[4]
+                }
+            }
+        } |
+        Group-Object Pass |
+        Sort-Object Name |
+        ForEach-Object {
+            [PSCustomObject]@{
+                Pass   = $_.Name
+                MinFPS = $_.Group.MinFPS
+                MaxFPS = $_.Group.MaxFPS
+                AvgFPS = $_.Group.AvgFPS
+            }
+        }
+    $outputText = (Get-FormattedDate)
+    $outputText +=
+        $scores | ForEach-Object {
+            @(
+                "",
+                (Get-FormattedNumbers -Name "Pass $($_.Pass) Min FPS" -Numbers $_.MinFPS),
+                (Get-FormattedNumbers -Name "Pass $($_.Pass) Max FPS" -Numbers $_.MaxFPS),
+                (Get-FormattedNumbers -Name "Pass $($_.Pass) Avg FPS" -Numbers $_.AvgFPS)
+            )
+        }
+    $outputText | Out-File -FilePath (Join-Path $Folder "fps.txt") -Encoding UTF8
+}
+
 function Invoke-3DMark {
     param(
         [Parameter(Mandatory)][String]$Folder,
@@ -384,10 +463,8 @@ function Invoke-3DMark {
         Remove-Item $resultsrootfolder -Recurse -Force
     }
     Write-Host "Starting 3DMark..."
-    # appid for 3dmark demo is 231350 (does not run without steam)
     Start-Process "steam://rungameid/231350"
-    # application takes a while to initialize
-    Start-Sleep -Seconds 45
+    Start-Sleep -Seconds 45  # application takes a while to initialize
     Set-ProcessPriority -Name 3DMark -Priority $Priority
     Write-Host "Please run the appropriate 3DMark test five times, then exit the application..."
     Wait-Process -Name 3DMark
@@ -537,11 +614,21 @@ function Invoke-HwinfoCyberpunk {
     param(
         [Parameter(Mandatory)][String]$Folder,
         [Parameter(Mandatory)][String]$HwinfoExe,
-        [Parameter(Mandatory)][String]$CyberpunkExe,
         [Parameter(Mandatory)][String]$Priority
     )
     Start-Hwinfo -Folder $Folder -HwinfoExe $HwinfoExe -Priority $Priority
-    Invoke-Cyberpunk -Folder $Folder -CyberpunkExe $CyberpunkExe -Priority $Priority
+    Invoke-Cyberpunk -Folder $Folder -Priority $Priority
+    Stop-Hwinfo
+}
+
+function Invoke-HwinfoGTAVEnhanced {
+    param(
+        [Parameter(Mandatory)][String]$Folder,
+        [Parameter(Mandatory)][String]$HwinfoExe,
+        [Parameter(Mandatory)][String]$Priority
+    )
+    Start-Hwinfo -Folder $Folder -HwinfoExe $HwinfoExe -Priority $Priority
+    Invoke-GTAVEnhanced -Folder $Folder -Priority $Priority
     Stop-Hwinfo
 }
 
@@ -576,7 +663,6 @@ function Invoke-BenchKit {
         [Parameter(Mandatory)][String]$CinebenchExe,
         [Parameter(Mandatory)][String]$OCCTExe,
         [Parameter(Mandatory)][String]$Prime95Exe,
-        [Parameter(Mandatory)][String]$CyberpunkExe,
         [Parameter(Mandatory)][String]$BlenderBenchmarkExe,
         [Switch]$Cpu,
         [Switch]$Gpu,
@@ -659,7 +745,14 @@ function Invoke-BenchKit {
             Name = "bench_cyberpunk"
             Script = {
                 param($path)
-                Invoke-HwinfoCyberpunk -Folder $path -HwinfoExe $HwinfoExe -CyberpunkExe $CyberpunkExe -Priority $Priority
+                Invoke-HwinfoCyberpunk -Folder $path -HwinfoExe $HwinfoExe -Priority $Priority
+            }
+        }
+        @{
+            Name = "bench_gtav_enhanced"
+            Script = {
+                param($path)
+                Invoke-HwinfoGTAVEnhanced -Folder $path -HwinfoExe $HwinfoExe -Priority $Priority
             }
         }
         "bench_3dmark_steelnomad","bench_3dmark_timespy" | ForEach-Object {
