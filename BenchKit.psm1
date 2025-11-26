@@ -30,6 +30,15 @@ function Get-FormattedNumbers {
     Write-Output ("95% CI for mean: [{0:$Format}, {1:$Format}]" -f $confint)
 }
 
+function Export-Score {
+    param(
+        [String]$Path,
+        [Double[]]$Numbers = @()
+    )
+    "Score" | Set-Content $Path
+    $Numbers | Add-Content $Path
+}
+
 function Get-FormattedDate {
     Write-Output "=== Date ==="
     Write-Output (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
@@ -209,7 +218,7 @@ function Invoke-Wait {
 function Find-CinebenchValues {
     param(
         [Parameter(Mandatory)][String]$LogFile,
-        [Parameter(Mandatory)][String]$OutputFile
+        [Parameter(Mandatory)][String]$OutputFolder
     )
     if (-not (Test-Path $LogFile)) {
         Write-Error "Log file not found: $LogFile"
@@ -224,7 +233,8 @@ function Find-CinebenchValues {
             (Get-FormattedDate),
             (Get-FormattedNumbers -Name "Score" -Numbers $numbers)
         )
-        $outputText | Out-File -FilePath $OutputFile -Encoding UTF8
+        $outputText | Out-File -FilePath (Join-Path $OutputFolder "results.txt") -Encoding UTF8
+        Export-Score -Path (Join-Path $OutputFolder "score.csv") -Numbers $numbers
     } else {
         Write-Warning "No values found in log."
     }
@@ -257,7 +267,7 @@ function Invoke-Cinebench {
     Invoke-Wait -Activity "Cinebench" -Duration $Duration
     Write-Host "Waiting for Cinebench to complete..."
     Wait-Process -Name Cinebench
-    Find-CinebenchValues -LogFile $log -OutputFile (Join-Path $Folder "score.txt")
+    Find-CinebenchValues -LogFile $log -OutputFolder $Folder
 }
 
 function Invoke-OCCT {
@@ -381,7 +391,8 @@ function Invoke-Cyberpunk {
         (Get-FormattedNumbers -Name "MinFps" -Numbers ($allFps | Where-Object Min | ForEach-Object Min)),
         (Get-FormattedNumbers -Name "MaxFps" -Numbers ($allFps | Where-Object Max | ForEach-Object Max))
     )
-    $outputText | Out-File -FilePath (Join-Path $Folder "fps.txt") -Encoding UTF8
+    $outputText | Out-File -FilePath (Join-Path $Folder "results.txt") -Encoding UTF8
+    Export-Score -Path (Join-Path $Folder "score.csv") -Numbers ($allFps | Where-Object Avg | ForEach-Object Avg)
 }
 
 function Invoke-GTAVEnhanced {
@@ -450,7 +461,8 @@ function Invoke-GTAVEnhanced {
                 (Get-FormattedNumbers -Name "Pass $($_.Pass) Avg FPS" -Numbers $_.AvgFPS)
             )
         }
-    $outputText | Out-File -FilePath (Join-Path $Folder "fps.txt") -Encoding UTF8
+    $outputText | Out-File -FilePath (Join-Path $Folder "results.txt") -Encoding UTF8
+    Export-Score -Path (Join-Path $Folder "score.csv") -Numbers ($score | Where-Object { $_.Pass -Eq 4 } | ForEach-Object { $_.AvgFPS })
 }
 
 function Invoke-3DMark {
@@ -482,7 +494,8 @@ function Invoke-3DMark {
             (Get-FormattedDate),
             (Get-FormattedNumbers -Name "Score" -Numbers $scores)
         )
-        $outputText | Out-File -FilePath (Join-Path $Folder "score.txt") -Encoding UTF8
+        $outputText | Out-File -FilePath (Join-Path $Folder "results.txt") -Encoding UTF8
+        Export-Score -Path (Join-Path $Folder "score.csv") -Numbers $scores
     } else {
         Write-Error "Benchmark results folder not found: $resultsrootfolder"
     }
@@ -556,6 +569,7 @@ function Invoke-BlenderBenchmark {
     $output += (Get-FormattedNumbers -Name "Total" -Numbers $scorestotal)
     $scorePath = Join-Path $Folder "score.txt"
     $output | Out-File -FilePath $scorePath -Encoding UTF8
+    Export-Score -Path (Join-Path $Folder "score.csv") -Numbers $scorestotal
 }
 
 function Invoke-BenchKit {
